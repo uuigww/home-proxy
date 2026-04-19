@@ -1,0 +1,17 @@
+[Unit]
+Description=Weekly refresh of Xray geosite/geoip rules for home-proxy
+Documentation=https://github.com/uuigww/home-proxy
+
+[Timer]
+# Sunday 04:00 server local time, with a 15-minute randomised delay so that
+# a fleet of home-proxy servers does not hammer GitHub in the same second.
+OnCalendar=Sun *-*-* 04:00:00
+RandomizedDelaySec=15min
+
+# If the machine was off at the scheduled time, run at next boot.
+Persistent=true
+
+Unit=home-proxy-geoupdate.service
+
+[Install]
+WantedBy=timers.target

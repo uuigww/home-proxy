@@ -1,0 +1,44 @@
+[Unit]
+Description=home-proxy weekly geosite/geoip refresh
+Documentation=https://github.com/uuigww/home-proxy
+After=network-online.target
+Wants=network-online.target
+ConditionPathIsDirectory=/usr/local/share/xray
+
+[Service]
+Type=oneshot
+
+# Download the latest Loyalsoldier rule-set to a scratch dir, verify it's a
+# non-empty file, then atomically move it into Xray's data dir. Reload xray
+# afterwards so the new rules take effect immediately.
+ExecStart=/usr/bin/env bash -c ' \
+    set -euo pipefail; \
+    tmp=$(mktemp -d); \
+    trap "rm -rf \"$tmp\"" EXIT; \
+    base="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download"; \
+    for f in geosite.dat geoip.dat; do \
+        /usr/bin/curl -fsSL --retry 3 --retry-delay 5 -o "$tmp/$f" "$base/$f"; \
+        test -s "$tmp/$f" || { echo "downloaded $f is empty" >&2; exit 1; }; \
+    done; \
+    install -o root -g root -m 0644 "$tmp/geosite.dat" /usr/local/share/xray/geosite.dat; \
+    install -o root -g root -m 0644 "$tmp/geoip.dat"   /usr/local/share/xray/geoip.dat; \
+'
+ExecStartPost=/bin/systemctl reload-or-restart xray.service
+
+# Hardening
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/usr/local/share/xray
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

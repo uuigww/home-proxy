@@ -1,5 +1,5 @@
-# GoReleaser config — full pipeline wired in M6.
-# https://goreleaser.com
+# GoReleaser v2 config for home-proxy.
+# See https://goreleaser.com/customization/ for reference.
 version: 2
 
 project_name: home-proxy
@@ -17,7 +17,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X github.com/uuigww/home-proxy/internal/version.Version={{.Version}}
+      - -s -w -X github.com/uuigww/home-proxy/internal/version.Version={{.Version}} -X github.com/uuigww/home-proxy/internal/version.Commit={{.Commit}} -X github.com/uuigww/home-proxy/internal/version.Date={{.Date}}
     goos:
       - linux
       - darwin
@@ -30,7 +30,11 @@ builds:
         goarch: arm64
 
 archives:
+  # Primary installer-bundle archive: ships the binary plus everything a user
+  # needs to drive install.sh on a fresh host.
   - id: default
+    ids:
+      - home-proxy
     formats: [ "tar.gz" ]
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
@@ -40,11 +44,22 @@ archives:
     files:
       - LICENSE
       - README.md
-      - scripts/install.sh
+      - config.example.toml
+      - src: scripts/install.sh
+        dst: scripts/install.sh
+        info:
+          mode: 0755
+      - src: scripts/uninstall.sh
+        dst: scripts/uninstall.sh
+        info:
+          mode: 0755
       - deploy/home-proxy.service
+      - deploy/home-proxy-geoupdate.service
+      - deploy/home-proxy-geoupdate.timer
 
 checksum:
   name_template: "checksums.txt"
+  algorithm: sha256
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
@@ -57,6 +72,70 @@ changelog:
       - "^docs:"
       - "^test:"
       - "^chore:"
+      - "^ci:"
+
+nfpms:
+  - id: home-proxy
+    package_name: home-proxy
+    vendor: uuigww
+    homepage: https://github.com/uuigww/home-proxy
+    maintainer: uuigww <noreply@users.noreply.github.com>
+    description: |-
+      home-proxy: Xray+Reality+SOCKS5 home proxy managed through a Telegram bot.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    dependencies:
+      - curl
+    # Where artefacts land on the target filesystem.
+    bindir: /usr/local/bin
+    contents:
+      # systemd units in the distro-preferred vendor dir.
+      - src: deploy/home-proxy.service
+        dst: /usr/lib/systemd/system/home-proxy.service
+        file_info:
+          mode: 0644
+      - src: deploy/home-proxy-geoupdate.service
+        dst: /usr/lib/systemd/system/home-proxy-geoupdate.service
+        file_info:
+          mode: 0644
+      - src: deploy/home-proxy-geoupdate.timer
+        dst: /usr/lib/systemd/system/home-proxy-geoupdate.timer
+        file_info:
+          mode: 0644
+      # Installer script available for manual re-runs.
+      - src: scripts/install.sh
+        dst: /usr/local/share/home-proxy/install.sh
+        file_info:
+          mode: 0755
+      - src: scripts/uninstall.sh
+        dst: /usr/local/share/home-proxy/uninstall.sh
+        file_info:
+          mode: 0755
+      # Example config — NOT the real config; the postinstall script drops a
+      # placeholder at /etc/home-proxy/config.toml (see scripts below).
+      - src: config.example.toml
+        dst: /usr/local/share/home-proxy/config.example.toml
+        file_info:
+          mode: 0644
+      - src: LICENSE
+        dst: /usr/local/share/home-proxy/LICENSE
+        file_info:
+          mode: 0644
+      - src: README.md
+        dst: /usr/local/share/home-proxy/README.md
+        file_info:
+          mode: 0644
+    scripts:
+      preinstall: deploy/nfpm/preinstall.sh
+      postinstall: deploy/nfpm/postinstall.sh
+      preremove: deploy/nfpm/preremove.sh
+      postremove: deploy/nfpm/postremove.sh
+    overrides:
+      rpm:
+        dependencies:
+          - curl
 
 release:
   github:
@@ -64,3 +143,19 @@ release:
     name: home-proxy
   draft: false
   prerelease: auto
+
+# TODO(m7+): add a 'brews:' stanza that publishes a macOS Homebrew tap once
+# we have a dedicated homebrew-tap repo under github.com/uuigww/homebrew-tap.
+# Example:
+#   brews:
+#     - repository:
+#         owner: uuigww
+#         name: homebrew-tap
+#       homepage: https://github.com/uuigww/home-proxy
+#       description: "Xray+Reality+SOCKS5 home proxy managed via Telegram"
+#       license: "MIT"
+#       install: |-
+#         bin.install "home-proxy"
+
+# Docker images intentionally omitted — README takes an explicit anti-Docker
+# stance for this project; distribution is source + tarball + deb/rpm.
