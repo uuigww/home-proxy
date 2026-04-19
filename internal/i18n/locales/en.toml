@@ -1,5 +1,171 @@
-# English UI strings. Populated in M4.
+# English UI strings for the home-proxy Telegram bot.
+# Kept in lockstep with ru.toml: the i18n package falls back to these.
 
 [meta]
 name = "English"
 code = "en"
+
+[menu]
+title = "🏠 home-proxy"
+summary = "Active: %d · Today: %s"
+users = "👥 Users"
+stats = "📊 Statistics"
+server = "⚙️ Server"
+help = "ℹ️ Help"
+back = "⬅ Back"
+cancel = "✖ Cancel"
+next = "Next ▶"
+home = "🏠 Menu"
+refresh = "🔄 Refresh"
+
+[help]
+title = "ℹ️ Help"
+body = """
+home-proxy manages VLESS+Reality and SOCKS5 straight from Telegram.
+
+• Every action happens in one message.
+• Limits and stats update automatically.
+• Critical alerts come through at any time of day."""
+
+[users.list]
+title = "Users (page %d/%d)"
+empty = "Nobody yet. Add your first user."
+add = "➕ Add"
+header = "👥 Users"
+page_prev = "◀"
+page_next = "▶"
+
+[users.card]
+title = "👤 %s"
+enabled = "enabled"
+disabled = "disabled"
+vless_on = "🔄 VLESS+Reality: on"
+vless_off = "🔄 VLESS+Reality: off"
+socks_on = "🧦 SOCKS5: on"
+socks_off = "🧦 SOCKS5: off"
+limit = "🎯 Limit: %s"
+used = "📈 Used: %s (%d%%)"
+created = "📅 Since: %s"
+links = "📎 Links"
+qr = "📱 QR"
+disable = "🚫 Disable"
+enable = "✅ Enable"
+delete = "🗑 Delete"
+confirm_delete = "Delete user %s? This cannot be undone."
+confirm_yes = "Yes, delete"
+confirm_no = "Cancel"
+change_limit = "Change limit"
+
+[wizard.add]
+step1_title = "Step 1/3 — Name"
+step1_prompt = "Enter a name (latin letters, digits, dash; up to 32 chars):"
+step2_title = "Step 2/3 — Protocols"
+step2_prompt = "Pick protocols (one or both):"
+step3_title = "Step 3/3 — Traffic limit"
+step3_prompt = "Pick a monthly limit:"
+limit_10gb = "10 GB"
+limit_50gb = "50 GB"
+limit_100gb = "100 GB"
+limit_unlimited = "∞"
+limit_custom = "✍ Custom"
+proto_vless = "🔄 VLESS+Reality"
+proto_socks = "🧦 SOCKS5"
+done = "✅ Done\nName: %s\nProtocols: %s\nLimit: %s"
+proto_none = "Pick at least one protocol."
+
+[stats]
+title = "📊 Statistics"
+total = "Traffic: %s (↑%s · ↓%s)"
+active = "Active: %d / %d"
+top_users = "🏆 Top users"
+no_data = "No data yet."
+errors_today = "Errors today: %d"
+
+[server]
+title = "⚙️ Server"
+xray_status = "Xray: %s"
+xray_online = "online"
+xray_offline = "offline"
+reality_keys = "Reality keys: %s"
+rotate_reality = "♻ Rotate Reality"
+warp_status = "Warp: %s"
+warp_ok = "configured"
+warp_missing = "missing"
+update_geo = "🗺 Update geosite"
+notifications = "🔔 Notifications"
+reality_age = "age %s"
+
+[notif.settings]
+title = "🔔 Notifications"
+critical = "🔴 Critical"
+important = "⚠ Important"
+info = "ℹ Info"
+info_others_only = "ℹ Others only"
+security = "🛡 Security"
+daily = "📅 Daily digest"
+digest_hour = "⏰ Digest hour: %d:00"
+quiet_hours = "🌙 Quiet hours: %d:00 – %d:00"
+on = "on"
+off = "off"
+
+[err]
+not_admin = "Access denied."
+generic = "Something went wrong. Try again later."
+user_exists = "A user with that name already exists."
+invalid_name = "Name must be latin letters, digits, or dash (up to 32 chars)."
+db = "Database error."
+xray = "Xray error."
+
+[links]
+vless_copy = "Copy VLESS"
+socks_copy = "Copy SOCKS5"
+qr_hint = "Scan this QR in a VLESS client."
+none = "User has no protocols enabled."
+
+[notif]
+"xray.api.unreachable" = "⚠ Xray gRPC unreachable (%d consecutive failures). Last error: %s"
+"xray.process.restart_failed" = "💥 xray.service failed %d× in %s. systemd gave up."
+"warp.outbound.down" = "🌐 Warp endpoint unreachable. Google services broken for users."
+"xray.config.build_failed" = "🧩 Xray config build failed; kept previous. Reason: %s"
+"store.migration_failed" = "🗄 SQLite migration %s→%s failed. Daemon halted."
+"store.corruption" = "🗄 SQLite integrity check failed: %s. Backup at %s."
+"user.quota.80" = "📈 %s used 80%% of %s."
+"user.quota.100" = "🚫 %s hit limit (%s) and was disabled."
+"host.disk_low" = "💾 Disk low: %s has %s free."
+"reality.key.age_warn" = "🔑 Reality keypair is %d days old. Consider rotating."
+"geo.data.stale" = "🗺 geosite data is %d days old. Auto-update failed."
+"digest.daily" = "📅 Daily digest · %s\nTraffic: %s (↑%s · ↓%s)\nActive: %d / %d\nErrors: %d"
+"digest.weekly" = "📅 Weekly digest · %s"
+"user.created" = "🆕 @%s created %s (%s · %s)"
+"user.limit_changed" = "✏ @%s set %s limit: %s → %s"
+"user.protocols_changed" = "✏ @%s changed %s protocols: %s → %s"
+"user.disabled" = "🚫 @%s disabled %s"
+"user.enabled" = "✅ @%s enabled %s"
+"user.deleted" = "🗑 @%s deleted %s"
+"reality.rotated" = "🔑 @%s rotated Reality keypair"
+"daemon.started" = "⚙ Daemon started · home-proxy %s · xray-core %s"
+"daemon.stopped" = "🛑 Daemon stopped"
+"admin.first_seen" = "👋 New admin @%s (id %s) opened /start."
+"nonadmin.spam" = "🛡 %d non-admin msgs in last hour. Latest: %s"
+"xray.config.drift" = "🧬 Xray config changed outside home-proxy."
+
+[digest.daily]
+title = "📅 Daily digest · %s"
+body = "Traffic: %s (↑%s · ↓%s)\nActive: %d / %d\nErrors: %d"
+top_header = "🏆 Top users:"
+top_line = "• %s — %s"
+
+[digest.weekly]
+title = "📅 Weekly digest · %s"
+
+[quiet]
+digest_title = "🌙 Quiet-hours digest (%d)"
+digest_item = "• %s"
+
+[batch]
+coalesced = " (×%d)"
+
+[generic]
+yes = "Yes"
+no = "No"
+ok = "OK"

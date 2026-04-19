@@ -1,6 +1,172 @@
-# Russian UI strings. Real keys added alongside the bot handlers in M4.
-# Keep keys flat and namespaced (menu.*, wizard.*, err.*) for grep-ability.
+# Russian UI strings for the home-proxy Telegram bot.
+# Keys are flat and namespaced (menu.*, wizard.*, err.*, notif.*) for grep-ability.
+# Nested TOML tables are flattened into dot-paths by internal/i18n.
 
 [meta]
 name = "Русский"
 code = "ru"
+
+[menu]
+title = "🏠 home-proxy"
+summary = "Активных: %d · Сегодня: %s"
+users = "👥 Пользователи"
+stats = "📊 Статистика"
+server = "⚙️ Сервер"
+help = "ℹ️ Справка"
+back = "⬅ Назад"
+cancel = "✖ Отмена"
+next = "Далее ▶"
+home = "🏠 Меню"
+refresh = "🔄 Обновить"
+
+[help]
+title = "ℹ️ Справка"
+body = """
+home-proxy управляет VLESS+Reality и SOCKS5 прямо из Telegram.
+
+• Все действия — в одном сообщении.
+• Лимиты и статистика обновляются автоматически.
+• Критические уведомления приходят в любое время суток."""
+
+[users.list]
+title = "Пользователи (стр. %d/%d)"
+empty = "Пока никого. Добавьте первого пользователя."
+add = "➕ Добавить"
+header = "👥 Пользователи"
+page_prev = "◀"
+page_next = "▶"
+
+[users.card]
+title = "👤 %s"
+enabled = "включён"
+disabled = "выключен"
+vless_on = "🔄 VLESS+Reality: вкл"
+vless_off = "🔄 VLESS+Reality: выкл"
+socks_on = "🧦 SOCKS5: вкл"
+socks_off = "🧦 SOCKS5: выкл"
+limit = "🎯 Лимит: %s"
+used = "📈 Потреб.: %s (%d%%)"
+created = "📅 С: %s"
+links = "📎 Ссылки"
+qr = "📱 QR"
+disable = "🚫 Отключить"
+enable = "✅ Включить"
+delete = "🗑 Удалить"
+confirm_delete = "Удалить пользователя %s? Действие необратимо."
+confirm_yes = "Да, удалить"
+confirm_no = "Отмена"
+change_limit = "Изменить лимит"
+
+[wizard.add]
+step1_title = "Шаг 1/3 — Имя"
+step1_prompt = "Введите имя пользователя (латиница, цифры, дефис, до 32 символов):"
+step2_title = "Шаг 2/3 — Протоколы"
+step2_prompt = "Выберите протоколы (можно оба):"
+step3_title = "Шаг 3/3 — Лимит трафика"
+step3_prompt = "Выберите месячный лимит:"
+limit_10gb = "10 ГБ"
+limit_50gb = "50 ГБ"
+limit_100gb = "100 ГБ"
+limit_unlimited = "∞"
+limit_custom = "✍ Свой"
+proto_vless = "🔄 VLESS+Reality"
+proto_socks = "🧦 SOCKS5"
+done = "✅ Готово\nИмя: %s\nПротоколы: %s\nЛимит: %s"
+proto_none = "Выберите хотя бы один протокол."
+
+[stats]
+title = "📊 Статистика"
+total = "Трафик: %s (↑%s · ↓%s)"
+active = "Активных: %d / %d"
+top_users = "🏆 Топ пользователей"
+no_data = "Пока нет данных."
+errors_today = "Ошибок сегодня: %d"
+
+[server]
+title = "⚙️ Сервер"
+xray_status = "Xray: %s"
+xray_online = "онлайн"
+xray_offline = "оффлайн"
+reality_keys = "Reality ключи: %s"
+rotate_reality = "♻ Обновить Reality"
+warp_status = "Warp: %s"
+warp_ok = "настроен"
+warp_missing = "не настроен"
+update_geo = "🗺 Обновить geosite"
+notifications = "🔔 Уведомления"
+reality_age = "возраст %s"
+
+[notif.settings]
+title = "🔔 Уведомления"
+critical = "🔴 Критические"
+important = "⚠ Важные"
+info = "ℹ Информация"
+info_others_only = "ℹ Только чужие действия"
+security = "🛡 Безопасность"
+daily = "📅 Ежедневный дайджест"
+digest_hour = "⏰ Час дайджеста: %d:00"
+quiet_hours = "🌙 Тихие часы: %d:00 – %d:00"
+on = "вкл"
+off = "выкл"
+
+[err]
+not_admin = "Доступ запрещён."
+generic = "Произошла ошибка. Попробуйте позже."
+user_exists = "Пользователь с таким именем уже существует."
+invalid_name = "Имя должно быть из латиницы, цифр или дефиса (до 32 символов)."
+db = "Ошибка базы данных."
+xray = "Ошибка Xray."
+
+[links]
+vless_copy = "Скопировать VLESS"
+socks_copy = "Скопировать SOCKS5"
+qr_hint = "Отсканируйте QR клиентом VLESS."
+none = "У пользователя нет включённых протоколов."
+
+[notif]
+"xray.api.unreachable" = "⚠ Xray gRPC недоступен (%d подряд отказов). Последняя ошибка: %s"
+"xray.process.restart_failed" = "💥 xray.service падал %d раз за %s. systemd сдался."
+"warp.outbound.down" = "🌐 Warp недоступен. Google-сервисы для пользователей сломаны."
+"xray.config.build_failed" = "🧩 Сборка конфига Xray упала; оставлен прежний. Причина: %s"
+"store.migration_failed" = "🗄 Миграция SQLite %s→%s провалена. Демон остановлен."
+"store.corruption" = "🗄 Integrity check SQLite провалился: %s. Резервная копия: %s."
+"user.quota.80" = "📈 %s потребил 80%% от %s."
+"user.quota.100" = "🚫 %s израсходовал лимит (%s) и был отключён."
+"host.disk_low" = "💾 Диск заканчивается: %s, свободно %s."
+"reality.key.age_warn" = "🔑 Ключи Reality используются уже %d дней. Стоит обновить."
+"geo.data.stale" = "🗺 geosite устарел (%d дней). Автообновление не удалось."
+"digest.daily" = "📅 Дайджест за %s\nТрафик: %s (↑%s · ↓%s)\nАктивных: %d / %d\nОшибок: %d"
+"digest.weekly" = "📅 Недельный дайджест за %s"
+"user.created" = "🆕 @%s создал %s (%s · %s)"
+"user.limit_changed" = "✏ @%s сменил лимит %s: %s → %s"
+"user.protocols_changed" = "✏ @%s изменил протоколы %s: %s → %s"
+"user.disabled" = "🚫 @%s отключил %s"
+"user.enabled" = "✅ @%s включил %s"
+"user.deleted" = "🗑 @%s удалил %s"
+"reality.rotated" = "🔑 @%s обновил ключи Reality"
+"daemon.started" = "⚙ Демон запущен · home-proxy %s · xray-core %s"
+"daemon.stopped" = "🛑 Демон остановлен"
+"admin.first_seen" = "👋 Новый админ @%s (id %s) открыл /start."
+"nonadmin.spam" = "🛡 %d не-админских сообщений за последний час. Последнее от %s."
+"xray.config.drift" = "🧬 Конфиг Xray был изменён вне home-proxy."
+
+[digest.daily]
+title = "📅 Дайджест за %s"
+body = "Трафик: %s (↑%s · ↓%s)\nАктивных: %d / %d\nОшибок: %d"
+top_header = "🏆 Топ пользователей:"
+top_line = "• %s — %s"
+
+[digest.weekly]
+title = "📅 Недельный дайджест за %s"
+
+[quiet]
+digest_title = "🌙 Сводка за тихие часы (%d)"
+digest_item = "• %s"
+
+[batch]
+coalesced = " (×%d)"
+
+[generic]
+yes = "Да"
+no = "Нет"
+ok = "ОК"
