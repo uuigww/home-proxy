@@ -4,8 +4,8 @@
 
 # home-proxy
 
-**Self-hosted Xray-прокси (VLESS + Reality + SOCKS5) под полным управлением из Telegram-бота.**
-Сервисы Google (Gemini, NotebookLM, YouTube, Поиск, …) автоматически маршрутизируются через Cloudflare Warp и продолжают работать с IP-адреса VPS.
+**Self-hosted Xray-прокси — VLESS + Reality + SOCKS5, полностью управляется из Telegram-бота.**
+Лёгкая **альтернатива Marzban / 3x-ui / Remnawave** для домашней группы 5–15 человек. Google AI (**Gemini**, **NotebookLM**, AI Studio), YouTube и Поиск автоматически идут через **Cloudflare Warp** — не ловят капчи и «unusual traffic» на IP VPS. Один Go-бинарь, SQLite, systemd. **Без веб-панели.**
 
 [![CI](https://github.com/uuigww/home-proxy/actions/workflows/ci.yml/badge.svg)](https://github.com/uuigww/home-proxy/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/uuigww/home-proxy?display_name=tag&sort=semver)](https://github.com/uuigww/home-proxy/releases)
@@ -23,6 +23,7 @@
 ## Оглавление
 
 - [Зачем home-proxy](#зачем-home-proxy)
+- [Для кого — сценарии использования](#для-кого--сценарии-использования)
 - [Возможности](#возможности)
 - [Установка](#установка)
   - [Путь A — Локальный wizard *(рекомендуется)*](#путь-a--локальный-wizard-рекомендуется)
@@ -46,11 +47,26 @@
 
 | Инструмент | Проблема для такого сценария |
 |---|---|
-| **3X-UI / Marzban / Remnawave** | Полноценные админ-панели с веб-UI, Docker, PostgreSQL, подписочными URL, плагинами оплаты. Избыточно, долго харденить, много учить. |
+| **3X-UI** (Sanaei) | Хорошая панель, но это именно панель: веб-UI, фичи для VPN-продаж, фокус на ресселлерах. Долго харденить под домашний сценарий. |
+| **Marzban / Marzneshin** (Gozargah) | То же самое — Docker + PostgreSQL + reverse proxy + subscription-сервера. Сделано для VPN-бизнеса, не для домохозяйства. |
+| **Remnawave** | Современный форк того же класса; тоже полноценная админ-панель. |
+| **Outline** (Jigsaw) | Чисто, но только Shadowsocks — ни VLESS, ни Reality, ни Warp-роутинга, ни per-user протоколов. |
 | **Голый Xray + config руками** | Контроль полный, но добавить юзера = редактировать JSON + `systemctl restart`. Статистика? Grep по логам. Лимиты? Пиши cron. Капчи Google? Удачи. |
-| **Коммерческий VPN** | Платите чужому сервису. Роутинг не ваш. Почти никто не пускает Google-трафик через «residential»-egress. |
+| **Коммерческий VPN (NordVPN / Mullvad / …)** | Платите чужому сервису. Роутинг не ваш. Почти никто не пускает Google-трафик через «residential»-egress — Gemini / NotebookLM всё равно не работают. |
 
 **home-proxy** стоит между этими крайностями: один Go-бинарь на ~15 МБ, SQLite, один systemd-unit и Telegram-бот, который даёт *только* те операции, которые реально нужны админу маленькой группы — ни больше, ни меньше.
+
+<br>
+
+## Для кого — сценарии использования
+
+- **Использовать Google Gemini, NotebookLM и AI Studio с VPS** — на обычных VPN-IP их не грузит, крутится «Something went wrong»; Warp-роутинг home-proxy это решает. [Подробнее ↓](#роутинг-google-gemini-notebooklm-youtube-поиск)
+- **Приватный VPN для семьи и друзей** — один бот, инвайт по ссылке, лимиты по людям, никаких «заплати $5/мес за мой VPN».
+- **Обход блокировок в РФ / Иране / корпоративных сетях** — VLESS + Reality в 2026 — самый устойчивый к DPI протокол.
+- **Заменить Marzban / 3x-ui в маленьких сетапах** — Xray остаётся, панель убираем.
+- **SOCKS5 для скриптов и ботов** — per-account креды, per-account квоты, on/off одной кнопкой из Telegram.
+- **Разблокировать YouTube при региональных ограничениях** — Warp-egress + Reality-inbound, и YouTube грузится как с домашнего подключения.
+- **Self-host вместо платного VPN** — ваш сервер, ваши логи (или их отсутствие), ваш тариф.
 
 <br>
 
@@ -441,23 +457,38 @@ deploy/               # home-proxy.service (systemd)
 
 ## FAQ
 
-**В: Почему не 3X-UI / Marzban?**
-О: Это панели под VPN-ресселлеров — оплата, подписки, мульти-node роутинг, веб-дашборды. home-proxy решает более узкую задачу (домашняя группа, Telegram-native, встроенный Google-роутинг) при ~1% операционной поверхности.
+**Работает ли home-proxy с Google Gemini и NotebookLM?**
+Да — ради этого и сделан Warp-роутинг. Без него Gemini показывает *«Something went wrong»*, а NotebookLM не грузит ноутбуки с VPS-IP. С home-proxy трафик на `gemini.google.com`, `notebooklm.google.com`, `aistudio.google.com`, `generativelanguage.googleapis.com` уходит через Cloudflare Warp (residential-репутация) — оба продукта работают как на домашнем интернете. См. [Роутинг Google ↑](#роутинг-google-gemini-notebooklm-youtube-поиск).
 
-**В: Хватит ли встроенного Telegram-бота в 3X-UI?**
-О: Встроенный бот 3X-UI шлёт уведомления и статистику, но не управляет юзерами end-to-end — всё равно лезешь в веб-UI. home-proxy *намеренно* только в Telegram.
+**Чем это отличается от Marzban / 3x-ui / Remnawave?**
+Там полноценные админ-панели — веб-UI, Docker, PostgreSQL, subscription-сервера, фичи ресселлеров, платёжные плагины. Круто если вы VPN-бизнес. home-proxy — более узкий инструмент для *домашнего self-host*: только Telegram, один Go-бинарь, SQLite, systemd, Google-роутинг встроен.
 
-**В: Warp платный?**
-О: Нет. `wgcf` регистрирует бесплатный Warp-аккаунт (тот же, что в приложении Cloudflare 1.1.1.1). На нашем профиле трафика — безлимит.
+**Хватит ли встроенного Telegram-бота в 3X-UI?**
+Бот 3X-UI шлёт статистику и уведомления, но не заменяет веб-UI для управления юзерами. home-proxy *намеренно* только в Telegram — веб-панели нет вовсе.
 
-**В: Google задетектит Warp и забанит?**
-О: Warp-egress IP шарятся с сотнями тысяч легитимных мобильных и десктопных клиентов Cloudflare. Блочить это — стрелять себе в ногу. Но роутинг отвязан, и мы можем переключить outbound одной правкой конфига, если Cloudflare изменит позицию.
+**Warp платный?**
+Нет. `wgcf` регистрирует бесплатный аккаунт Cloudflare Warp (тот же tier, что использует 1.1.1.1). Безлимит на профиле трафика домашней группы.
 
-**В: Помогает ли против РКН / иранского DPI?**
-О: VLESS + Reality сейчас (2026) — самый устойчивый протокол против активного DPI. `reality_dest = www.google.com` — безопасный дефолт; вы можете подставить любую живую TLS-цель, которую контролируете.
+**Google задетектит Warp и заблокирует?**
+Warp-egress IP шарятся с сотнями тысяч легитимных мобильных и десктопных клиентов Cloudflare. Блочить это — стрелять Google в ногу. Но роутинг отвязан: если репутация Cloudflare изменится, outbound переключается правкой в одну строку.
 
-**В: Можно ли держать бота рядом с другими своими ботами в одном Telegram-аккаунте?**
-О: Да — у каждого бота свой токен. home-proxy видит только свои апдейты.
+**Обходит ли РКН / блокировки в России?**
+VLESS + Reality в 2026 — самый устойчивый протокол против активного DPI. Дефолт `reality_dest = www.google.com` работает; можно подставить любую живую TLS-цель, которую вы контролируете. Гарантий нет — кот-и-мышь неизбежны — но архитектурно это мейнстрим-выбор RU-пользователей прямо сейчас.
+
+**Работает ли против Иранского / корпоративного DPI?**
+Тот же ответ что и про РКН — Reality сейчас state-of-the-art. Конкретный результат зависит от провайдера.
+
+**Можно ли держать бота рядом с другими своими ботами в одном Telegram-аккаунте?**
+Да — у каждого бота свой токен. home-proxy видит только свои апдейты.
+
+**Нужен VPS или можно дома?**
+Технически — любой Linux с белым IP. На практике — нужен маленький VPS вне вашей зоны блокировок. Проверено на Ubuntu 22.04+ / Debian 12+, x86_64 и arm64.
+
+**Логирует ли home-proxy трафик юзеров?**
+Только агрегаты по байтам (для лимитов и дайджеста). Никаких URL, destinations, timestamps-запросов. Xray-конфиг видно глазами — больше нигде ничего не пишется в SQLite.
+
+**Можно ли мигрировать с 3x-ui / Marzban?**
+Формальный миграционный тул не планируем (state-модель проще — меньше что переносить). Вручную: выписать имя и примерную квоту по каждому юзеру, `deploy` свежий home-proxy, пересоздать юзеров через бот. ~5 минут на 10 юзеров.
 
 <br>
 
@@ -467,6 +498,17 @@ deploy/               # home-proxy.service (systemd)
 
 <br>
 
+<details>
+<summary><b>Ключевые слова и topics</b> <sub>(помогают другим найти проект)</sub></summary>
+
+`telegram-bot` · `telegram-vpn` · `xray` · `xray-core` · `reality` · `vless` · `socks5` · `wireguard` · `cloudflare-warp` · `warp` · `vpn` · `proxy` · `self-hosted` · `self-hosted-vpn` · `gemini` · `google-gemini` · `notebooklm` · `aistudio` · `youtube-unblock` · `google-unblock` · `anti-censorship` · `russia-vpn` · `iran-vpn` · `rkn-bypass` · `roskomnadzor` · `dpi-bypass` · `marzban-alternative` · `3x-ui-alternative` · `remnawave-alternative` · `outline-alternative` · `go` · `golang` · `sqlite` · `systemd` · `no-docker` · `no-web-panel`
+
+</details>
+
+<br>
+
 <div align="center">
 <sub>Сделано для небольших групп, которые хотят свою инфру, а не чужой SaaS.</sub>
+<br>
+<sub>⭐ Поставьте звёздочку, если полезно — это главный сигнал для дальнейшего развития.</sub>
 </div>
