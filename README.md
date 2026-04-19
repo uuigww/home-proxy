@@ -109,6 +109,29 @@ curl -sSL https://raw.githubusercontent.com/uuigww/home-proxy/main/scripts/insta
 - [ ] M6 — install.sh + systemd + GoReleaser CI
 - [ ] M7 — Local SSH deploy wizard
 
+## Development
+
+### First-time local build
+
+The repo ships `go.mod` but no `go.sum` (scaffold-time artefact). Before the first local build or CI push:
+
+```bash
+cd home-proxy
+go mod tidy         # resolves deps and writes go.sum
+go build ./...
+go test ./...
+```
+
+Requires Go 1.23+. On macOS: `brew install go`. On Linux: see https://go.dev/doc/install.
+
+### Daily commands
+```bash
+make build           # local binary into bin/
+make build-deployer  # cross-compile deployer for mac/linux/windows into dist/
+make test
+make lint            # needs golangci-lint installed
+```
+
 ## License
 
 [MIT](./LICENSE)
