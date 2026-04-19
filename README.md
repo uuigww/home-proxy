@@ -20,6 +20,35 @@ A lightweight **Marzban / 3x-ui / Remnawave alternative** for 5–15 home users.
 
 <br>
 
+## ⚡ Install in 3 steps (under 60 seconds)
+
+```text
+┌─ 1. Create a Telegram bot ────────────────────────────────────┐
+│                                                               │
+│   Open @BotFather → /newbot → copy the token.                 │
+│   Get your own Telegram user id from @userinfobot.            │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
+
+┌─ 2. Grab a Linux VPS ─────────────────────────────────────────┐
+│                                                               │
+│   Any Ubuntu 22.04+ / Debian 12+ box with root and a public   │
+│   IP. 1 vCPU / 512 MB RAM is plenty. No Docker needed.        │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
+
+┌─ 3. Run one command on your laptop ───────────────────────────┐
+│                                                               │
+│   ./home-proxy deploy                                         │
+│   # asks for: server IP, SSH password, bot token, admin IDs   │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
+```
+
+Done. `/start` the bot from your admin account and add users via inline buttons. Gemini, NotebookLM, YouTube, and everything Google will work out of the box through the auto-provisioned Warp route.
+
+<br>
+
 ## Table of Contents
 
 - [Why home-proxy](#why-home-proxy)
@@ -444,12 +473,14 @@ deploy/               # home-proxy.service (systemd unit)
 ## Roadmap
 
 - [x] **M1** — Scaffold (Cobra CLI, config loader, systemd unit, CI skeleton)
-- [ ] **M2** — Xray config generator (VLESS+Reality inbound, SOCKS5 inbound, Warp WG outbound, geosite routing)
-- [ ] **M3** — SQLite store + Xray gRPC client (hot reload, live stats)
-- [ ] **M4** — Telegram bot with single-message UX + RU/EN i18n
-- [ ] **M5** — Limits watcher + admin notifications
-- [ ] **M6** — `install.sh` + GoReleaser release pipeline
-- [ ] **M7** — Local SSH deploy wizard (`home-proxy deploy`)
+- [x] **M2** — Xray config generator (VLESS+Reality inbound, SOCKS5 inbound, Warp WG outbound, geosite routing)
+- [x] **M3** — SQLite store + Xray client (hot reload, live stats; gRPC upgrade planned)
+- [x] **M4** — Telegram bot with single-message UX + RU/EN i18n
+- [x] **M5** — Limits watcher + admin notifications (quota, health, digests)
+- [x] **M6** — `install.sh` + systemd timers + GoReleaser CI/nfpm (.deb/.rpm)
+- [x] **M7** — Local SSH deploy wizard (`home-proxy deploy`)
+
+> **Status:** core 0.1 feature-complete — everything above is wired, tested (where a compiler is available) and pushed. Next up: release tagging, QR PNG encoder, Warp liveness probe, direct gRPC (replacing the CLI shim).
 
 Post-1.0 ideas: multi-server (one bot, many nodes), user self-service bot (let end-users see their own usage), Prometheus `/metrics` endpoint, TOTP 2FA for admin critical actions, optional Amnezia-WG outbound for Russia-hardening.
 

@@ -20,6 +20,35 @@
 
 <br>
 
+## ⚡ Установка в 3 шага (меньше минуты)
+
+```text
+┌─ 1. Создайте Telegram-бота ───────────────────────────────────┐
+│                                                               │
+│   Откройте @BotFather → /newbot → скопируйте токен.           │
+│   Узнайте свой Telegram-id через @userinfobot.                │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
+
+┌─ 2. Поднимите Linux-VPS ──────────────────────────────────────┐
+│                                                               │
+│   Любой Ubuntu 22.04+ / Debian 12+ с root и публичным IP.     │
+│   Хватит 1 vCPU / 512 MB RAM. Docker не нужен.                │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
+
+┌─ 3. Одна команда со своего ноута ─────────────────────────────┐
+│                                                               │
+│   ./home-proxy deploy                                         │
+│   # спросит: IP, SSH-пароль, токен бота, admin ID             │
+│                                                               │
+└───────────────────────────────────────────────────────────────┘
+```
+
+Готово. Напишите боту `/start` от админского аккаунта и добавляйте пользователей инлайн-кнопками. Gemini, NotebookLM, YouTube и другие Google-сервисы сразу работают через авто-настроенный Warp-роут.
+
+<br>
+
 ## Оглавление
 
 - [Зачем home-proxy](#зачем-home-proxy)
@@ -444,12 +473,14 @@ deploy/               # home-proxy.service (systemd)
 ## Roadmap
 
 - [x] **M1** — Scaffold (Cobra CLI, config loader, systemd unit, CI-скелет)
-- [ ] **M2** — Генератор Xray config (VLESS+Reality inbound, SOCKS5 inbound, Warp WG outbound, geosite routing)
-- [ ] **M3** — SQLite store + gRPC client Xray (hot reload, live stats)
-- [ ] **M4** — Telegram-бот + single-message UX + RU/EN i18n
-- [ ] **M5** — Limits watcher + уведомления админам
-- [ ] **M6** — `install.sh` + GoReleaser release pipeline
-- [ ] **M7** — Локальный SSH deploy wizard (`home-proxy deploy`)
+- [x] **M2** — Генератор Xray config (VLESS+Reality inbound, SOCKS5 inbound, Warp WG outbound, geosite routing)
+- [x] **M3** — SQLite store + клиент Xray (hot reload, live stats; прямой gRPC в плане)
+- [x] **M4** — Telegram-бот + single-message UX + RU/EN i18n
+- [x] **M5** — Limits watcher + уведомления админам (квоты, здоровье, дайджесты)
+- [x] **M6** — `install.sh` + systemd-таймеры + GoReleaser CI/nfpm (.deb/.rpm)
+- [x] **M7** — Локальный SSH deploy wizard (`home-proxy deploy`)
+
+> **Статус:** core 0.1 feature-complete — всё выше собрано, протестировано (где есть компилятор) и запушено. Дальше: релиз-тегирование, PNG-энкодер для QR, Warp-liveness-проба, прямой gRPC (вместо CLI-обёртки).
 
 Идеи после 1.0: мульти-сервер (один бот, много нод), self-service бот для юзеров (видят свой трафик), эндпоинт Prometheus `/metrics`, TOTP-2FA на критичные действия админа, опциональный Amnezia-WG outbound для хардененья под РФ.
 
