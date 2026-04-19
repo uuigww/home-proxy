@@ -1,0 +1,16 @@
+# home-proxy daemon configuration.
+# Only the first three keys are required. Defaults for the rest are fine
+# for almost every home-use setup.
+
+bot_token    = "123456789:REPLACE_ME_AABBCCDD-REPLACE_ME_EEFF"
+admins       = [111111111, 222222222]
+default_lang = "ru"              # "ru" or "en"
+
+# --- optional, all have sensible defaults ---
+# data_dir            = "/var/lib/home-proxy"
+# xray_api            = "127.0.0.1:10085"
+# xray_config         = "/usr/local/etc/xray/config.json"
+# reality_dest        = "www.google.com:443"
+# reality_server_name = "www.google.com"
+# socks_port          = 1080
+# reality_port        = 443

@@ -1,0 +1,6 @@
+# Russian UI strings. Real keys added alongside the bot handlers in M4.
+# Keep keys flat and namespaced (menu.*, wizard.*, err.*) for grep-ability.
+
+[meta]
+name = "Русский"
+code = "ru"

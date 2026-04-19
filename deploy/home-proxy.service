@@ -1,0 +1,32 @@
+[Unit]
+Description=home-proxy (Xray+Reality+SOCKS5 managed via Telegram)
+Documentation=https://github.com/uuigww/home-proxy
+After=network-online.target xray.service
+Wants=network-online.target
+Requires=xray.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/home-proxy serve --config /etc/home-proxy/config.toml
+Restart=on-failure
+RestartSec=5s
+User=root
+Group=root
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/home-proxy /usr/local/etc/xray /var/log/home-proxy
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# Logs to journald
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
