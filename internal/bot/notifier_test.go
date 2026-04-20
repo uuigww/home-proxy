@@ -106,6 +106,8 @@ func TestNotifierInfoFilteredByPrefs(t *testing.T) {
 	st := newStoreForTest(t)
 	prefs := store.NewDefaultAdminPrefs(222, "en")
 	prefs.NotifyInfo = false
+	prefs.QuietFromHour = 0 // disable quiet window so test is time-of-day independent
+	prefs.QuietToHour = 0
 	if err := st.UpsertAdminPrefs(ctx, prefs); err != nil {
 		t.Fatalf("seed prefs: %v", err)
 	}
@@ -124,6 +126,8 @@ func TestNotifierInfoOthersOnlySkipsActor(t *testing.T) {
 	st := newStoreForTest(t)
 	prefs := store.NewDefaultAdminPrefs(333, "en")
 	prefs.NotifyInfoOthersOnly = true
+	prefs.QuietFromHour = 0 // disable quiet window so test is time-of-day independent
+	prefs.QuietToHour = 0
 	if err := st.UpsertAdminPrefs(ctx, prefs); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
