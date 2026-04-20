@@ -14,16 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # GoReleaser needs the full history to build a changelog from
-          # previous tags.
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version-file: go.mod
           cache: true
 
-      # Make sure go.sum exists in the checkout before goreleaser hooks run.
       - name: go mod tidy
         run: go mod tidy
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/uuigww/home-proxy/internal/store"
@@ -470,16 +469,9 @@ func (w *Watcher) weeklyParams(ctx context.Context, tgID int64) map[string]any {
 	return out
 }
 
-// diskFree returns the number of free bytes on the filesystem that
-// contains path, via syscall.Statfs. It is split out so tests can
-// stub it when needed (the test file shadows this symbol).
-var diskFree = func(path string) (int64, error) {
-	var st syscall.Statfs_t
-	if err := syscall.Statfs(path, &st); err != nil {
-		return 0, err
-	}
-	// Bavail is the count of blocks available to unprivileged
-	// users; multiplied by the filesystem block size it is the
-	// free-space figure admins expect from `df`.
-	return int64(st.Bavail) * int64(st.Bsize), nil
-}
+// diskFree is assigned a real implementation by watcher_disk_unix.go on
+// unix-like targets; on other GOOSes (e.g. windows) it falls back to a
+// no-op that returns an error so the health poller silently skips the
+// disk-space warning. The variable form lets tests stub it.
+//
+// Real syscall lives in the OS-tagged files next to this one.

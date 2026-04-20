@@ -1,6 +1,6 @@
 module github.com/uuigww/home-proxy
 
-go 1.23
+go 1.25.0
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
@@ -9,7 +9,7 @@ require (
 	github.com/go-telegram/bot v1.12.0
 	github.com/pkg/sftp v1.13.7
 	github.com/spf13/cobra v1.8.1
-	golang.org/x/crypto v0.28.0
+	golang.org/x/crypto v0.50.0
 	modernc.org/sqlite v1.33.1
 )
 
@@ -32,9 +32,9 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/sys v0.26.0 // indirect
-	golang.org/x/term v0.25.0 // indirect
-	golang.org/x/text v0.19.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/term v0.42.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240801135723-a856999a2e4a // indirect
 	modernc.org/libc v1.55.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
