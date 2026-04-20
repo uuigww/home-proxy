@@ -20,32 +20,21 @@ A lightweight **Marzban / 3x-ui / Remnawave alternative** for 5–15 home users.
 
 <br>
 
-## ⚡ Install in 3 steps (under 60 seconds)
+## ⚡ Quick install (under 60 seconds)
 
-```text
-┌─ 1. Create a Telegram bot ────────────────────────────────────┐
-│                                                               │
-│   Open @BotFather → /newbot → copy the token.                 │
-│   Get your own Telegram user id from @userinfobot.            │
-│                                                               │
-└───────────────────────────────────────────────────────────────┘
+You need: a Telegram bot token ([@BotFather](https://t.me/BotFather)) · your Telegram user id ([@userinfobot](https://t.me/userinfobot)) · a Linux VPS (Ubuntu 22.04+ / Debian 12+).
 
-┌─ 2. Grab a Linux VPS ─────────────────────────────────────────┐
-│                                                               │
-│   Any Ubuntu 22.04+ / Debian 12+ box with root and a public   │
-│   IP. 1 vCPU / 512 MB RAM is plenty. No Docker needed.        │
-│                                                               │
-└───────────────────────────────────────────────────────────────┘
+```bash
+# 1. Download the deployer to your laptop (macOS / Linux — auto-detects arch)
+curl -fsSL https://raw.githubusercontent.com/uuigww/home-proxy/main/scripts/get.sh | bash
 
-┌─ 3. Run one command on your laptop ───────────────────────────┐
-│                                                               │
-│   ./home-proxy deploy                                         │
-│   # asks for: server IP, SSH password, bot token, admin IDs   │
-│                                                               │
-└───────────────────────────────────────────────────────────────┘
+# 2. Run the wizard — it asks for server IP, SSH password, bot token, admin IDs
+./home-proxy deploy
 ```
 
-Done. `/start` the bot from your admin account and add users via inline buttons. Gemini, NotebookLM, YouTube, and everything Google will work out of the box through the auto-provisioned Warp route.
+Done. `/start` your bot from the admin account and add users via inline buttons. Gemini, NotebookLM, YouTube and everything Google work out of the box through the auto-provisioned Warp route.
+
+👉 **Walk-through with screenshots and troubleshooting: [Install section ↓](#install)**
 
 <br>
 
@@ -54,9 +43,7 @@ Done. `/start` the bot from your admin account and add users via inline buttons.
 - [Why home-proxy](#why-home-proxy)
 - [Who it's for — use cases](#who-its-for--use-cases)
 - [Features](#features)
-- [Install](#install)
-  - [Path A — Local wizard *(recommended)*](#path-a--local-wizard-recommended)
-  - [Path B — Directly on the server](#path-b--directly-on-the-server)
+- [Install](#install) — step-by-step guide with troubleshooting
 - [Google routing: Gemini, NotebookLM, YouTube, Search](#google-routing-gemini-notebooklm-youtube-search)
 - [Telegram bot tour](#telegram-bot-tour)
 - [Admin notifications](#admin-notifications)
@@ -116,57 +103,181 @@ You want a private proxy for 5–15 people — family, friends, your own devices
 
 ## Install
 
-### Path A — Local wizard *(recommended)*
+### Before you start
 
-Run it on your laptop (macOS / Linux / Windows). Nothing to install on the server beforehand — the wizard drives the whole thing over SSH.
+You'll need three things — about 5 minutes to gather:
+
+- [ ] A **Telegram bot token** *(we'll create one below)*
+- [ ] **Your Telegram user ID** *(who's allowed to control the bot)*
+- [ ] A **Linux VPS** with root access — Ubuntu 22.04+ / Debian 12+, any $3–5/mo box works
+
+---
+
+### Step 1 — Create a Telegram bot *(1 min)*
+
+1. Open [**@BotFather**](https://t.me/BotFather) in Telegram.
+2. Send `/newbot`.
+3. Pick a display name, then a username ending with `bot` (e.g. `my_home_proxy_bot`).
+4. **Copy the token** — it looks like `1234567890:AAH...`. Save it somewhere.
+
+### Step 2 — Find your Telegram ID *(30 sec)*
+
+1. Open [**@userinfobot**](https://t.me/userinfobot) in Telegram.
+2. Send `/start`.
+3. **Copy the `Id`** — a number like `123456789`.
+
+### Step 3 — Get a Linux VPS *(2 min)*
+
+Any provider works. Popular options:
+
+| Provider | From | Region |
+|---|---|---|
+| [Hetzner](https://www.hetzner.com/cloud) | €4.15/mo | 🇩🇪 🇫🇮 🇺🇸 |
+| [PQ Hosting](https://pq.hosting/) | €3.50/mo | 🇳🇱 🇫🇷 🇸🇪 ... |
+| [Aeza](https://aeza.net/) | €3.00/mo | 🇳🇱 🇩🇪 ... |
+| DigitalOcean / Vultr / Linode | $5/mo | global |
+
+Pick **Ubuntu 22.04** or **Debian 12** (x86_64 or arm64 — both supported).
+After setup, save **IP address** + **root password**.
+
+### Step 4 — Download the wizard to your laptop *(15 sec)*
+
+One command works on macOS and Linux (auto-detects your arch):
 
 ```bash
-# 1. Download the binary for your OS from Releases
-#    https://github.com/uuigww/home-proxy/releases
+curl -fsSL https://raw.githubusercontent.com/uuigww/home-proxy/main/scripts/get.sh | bash
+```
 
-# 2. Run the wizard
+**Windows:** download [`home-proxy_*_windows_amd64.zip`](https://github.com/uuigww/home-proxy/releases/latest) from the Releases page and extract.
+
+### Step 5 — Run the wizard *(30 sec)*
+
+```bash
 ./home-proxy deploy
 ```
 
-Interactive prompts:
+It will ask you to paste what you gathered:
+
 ```
-? Server IP / host:          203.0.113.10
-? SSH user:                  root
+? Server IP / host:          203.0.113.10      ← your VPS IP
+? SSH user:                  root              ← default, press Enter
 ? Auth method:               › Password
-                               SSH key
-                               ssh-agent
-? Password:                  ••••••••
-? Telegram bot token:        1234567890:AA...
-? Admin Telegram IDs:        111111,222222
-? UI language:               › ru   en
+? Password:                  ••••••••          ← your VPS password
+? Telegram bot token:        1234567890:AA...  ← from step 1
+? Admin Telegram IDs:        123456789         ← from step 2
+? UI language:               › ru   en         ← pick one
 ```
 
-Non-interactive for CI / automation:
+Then you'll see 8 green ✓ as the wizard provisions everything:
+
+```
+▸ Checking connection to root@203.0.113.10 ....... ✓
+▸ Detecting OS/arch .............................. Ubuntu 24.04 / amd64
+▸ Uploading bootstrap ............................ ✓
+▸ Installing Xray-core ........................... ✓
+▸ Registering Cloudflare Warp .................... ✓
+▸ Generating Reality keypair ..................... ✓
+▸ Writing /etc/home-proxy/config.toml ............ ✓
+▸ Enabling systemd service ....................... ✓ (active)
+▸ Sanity check: bot.getMe() ...................... ✓ @your_bot
+
+✅  Ready. Send /start to @your_bot from an admin account.
+```
+
+### Step 6 — Say hi to your bot 🎉
+
+1. Open your bot in Telegram (search for its `@username`).
+2. Send `/start`.
+3. Main menu appears — tap **👥 Users → ➕ Add** to create your first user.
+4. Copy the `vless://` link or QR into [Hiddify](https://github.com/hiddify/hiddify-next), [v2rayNG](https://github.com/2dust/v2rayNG) or [V2Box](https://v2box.com/) — and surf. Gemini / NotebookLM / YouTube / Search all work out of the box.
+
+<br>
+
+### Troubleshooting
+
+<details>
+<summary><b>macOS says "cannot be opened because the developer cannot be verified"</b></summary>
+
+Remove the quarantine flag once and re-run:
 ```bash
-./home-proxy deploy \
-  --host 203.0.113.10 \
-  --user root \
-  --password 'hunter2' \
-  --bot-token "1234567890:AA..." \
-  --admins "111111,222222" \
-  --lang ru
+xattr -d com.apple.quarantine home-proxy
+./home-proxy deploy
+```
+</details>
+
+<details>
+<summary><b>Wizard fails at "Checking connection"</b></summary>
+
+The IP, user, or password is off. First make sure plain SSH works:
+```bash
+ssh root@<your-vps-ip>
+```
+If that fails, the wizard will fail too. Fix SSH first (check firewall, password, user).
+</details>
+
+<details>
+<summary><b>Wizard fails at "bot.getMe()"</b></summary>
+
+Either the bot token is wrong, or the server can't reach `api.telegram.org`. Double-check the token in [@BotFather](https://t.me/BotFather) (`/token`). If the token is right, check the VPS firewall — outbound HTTPS to `api.telegram.org` must be allowed.
+</details>
+
+<details>
+<summary><b>I lost my bot token / admin ID</b></summary>
+
+On the server: `sudo cat /etc/home-proxy/config.toml` shows everything.
+</details>
+
+<details>
+<summary><b>How do I update home-proxy later?</b></summary>
+
+On the server, re-run the installer — it's idempotent:
+```bash
+sudo /usr/local/share/home-proxy/install.sh \
+  --bot-token "…" --admins "…" --lang ru --version v0.1.1
 ```
 
-The wizard uploads the binary, installs Xray + wgcf, generates Reality keys, writes `/etc/home-proxy/config.toml`, installs systemd, verifies `bot.getMe()` — with green ✓ per step streamed live.
+Or, on `.deb`/`.rpm` systems: `sudo apt install ./home-proxy_0.1.1_linux_amd64.deb` (overwrites in place).
+</details>
 
-### Path B — Directly on the server
+<details>
+<summary><b>How do I uninstall?</b></summary>
 
-For when you SSH'd in yourself:
+On the server:
+```bash
+sudo /usr/local/share/home-proxy/uninstall.sh --purge
+```
+Removes the binary, systemd units, config, and state. Xray-core is left alone (you might want it for other services).
+</details>
+
+<br>
+
+### Alternative install: directly on the server
+
+If you're already SSH'd into the VPS and prefer `curl | bash`:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/uuigww/home-proxy/main/scripts/install.sh \
   | sudo bash -s -- \
       --bot-token "1234567890:AA..." \
-      --admins "111111,222222" \
+      --admins "123456789" \
       --lang ru
 ```
 
-**Server requirements:** Linux (Ubuntu 22.04+ / Debian 12+ tested), x86_64 or arm64, root access, open ports 443 (Reality) and your chosen SOCKS5 port.
+Same flags as the wizard. Full flag reference in [`docs/install.md`](./docs/install.md).
+
+### Alternative install: non-interactive deploy
+
+For CI or scripting, pass all flags to the wizard:
+
+```bash
+./home-proxy deploy --yes \
+  --host 203.0.113.10 \
+  --user root \
+  --password 'hunter2' \
+  --bot-token "1234567890:AA..." \
+  --admins "123456789" \
+  --lang ru
+```
 
 <br>
 

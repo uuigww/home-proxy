@@ -20,32 +20,21 @@
 
 <br>
 
-## ⚡ Установка в 3 шага (меньше минуты)
+## ⚡ Быстрая установка (меньше минуты)
 
-```text
-┌─ 1. Создайте Telegram-бота ───────────────────────────────────┐
-│                                                               │
-│   Откройте @BotFather → /newbot → скопируйте токен.           │
-│   Узнайте свой Telegram-id через @userinfobot.                │
-│                                                               │
-└───────────────────────────────────────────────────────────────┘
+Нужно: токен Telegram-бота ([@BotFather](https://t.me/BotFather)) · ваш Telegram-id ([@userinfobot](https://t.me/userinfobot)) · Linux-VPS (Ubuntu 22.04+ / Debian 12+).
 
-┌─ 2. Поднимите Linux-VPS ──────────────────────────────────────┐
-│                                                               │
-│   Любой Ubuntu 22.04+ / Debian 12+ с root и публичным IP.     │
-│   Хватит 1 vCPU / 512 MB RAM. Docker не нужен.                │
-│                                                               │
-└───────────────────────────────────────────────────────────────┘
+```bash
+# 1. Качаем deployer на ноутбук (macOS / Linux — сам определит арку)
+curl -fsSL https://raw.githubusercontent.com/uuigww/home-proxy/main/scripts/get.sh | bash
 
-┌─ 3. Одна команда со своего ноута ─────────────────────────────┐
-│                                                               │
-│   ./home-proxy deploy                                         │
-│   # спросит: IP, SSH-пароль, токен бота, admin ID             │
-│                                                               │
-└───────────────────────────────────────────────────────────────┘
+# 2. Запускаем wizard — спросит IP сервера, SSH-пароль, токен бота, admin ID
+./home-proxy deploy
 ```
 
-Готово. Напишите боту `/start` от админского аккаунта и добавляйте пользователей инлайн-кнопками. Gemini, NotebookLM, YouTube и другие Google-сервисы сразу работают через авто-настроенный Warp-роут.
+Готово. Напишите боту `/start` от админского аккаунта и добавляйте пользователей инлайн-кнопками. Gemini, NotebookLM, YouTube и другие Google-сервисы работают сразу через авто-настроенный Warp-роут.
+
+👉 **Подробный гайд со скриншотами и troubleshooting: [Установка ↓](#установка)**
 
 <br>
 
@@ -54,9 +43,7 @@
 - [Зачем home-proxy](#зачем-home-proxy)
 - [Для кого — сценарии использования](#для-кого--сценарии-использования)
 - [Возможности](#возможности)
-- [Установка](#установка)
-  - [Путь A — Локальный wizard *(рекомендуется)*](#путь-a--локальный-wizard-рекомендуется)
-  - [Путь B — Прямо на сервере](#путь-b--прямо-на-сервере)
+- [Установка](#установка) — пошаговый гайд с troubleshooting
 - [Роутинг Google: Gemini, NotebookLM, YouTube, Поиск](#роутинг-google-gemini-notebooklm-youtube-поиск)
 - [Тур по Telegram-боту](#тур-по-telegram-боту)
 - [Уведомления админам](#уведомления-админам)
@@ -116,57 +103,181 @@
 
 ## Установка
 
-### Путь A — Локальный wizard *(рекомендуется)*
+### Что понадобится
 
-Запускаете с ноутбука (macOS / Linux / Windows). На сервере руками ставить ничего не надо — wizard всё сделает по SSH.
+Три вещи — минут 5 на сбор:
+
+- [ ] **Токен Telegram-бота** *(создадим ниже)*
+- [ ] **Ваш Telegram ID** *(кто сможет управлять ботом)*
+- [ ] **Linux VPS** с root-доступом — Ubuntu 22.04+ / Debian 12+, любой за €3–5 в месяц
+
+---
+
+### Шаг 1 — Создать Telegram-бота *(1 мин)*
+
+1. Откройте [**@BotFather**](https://t.me/BotFather) в Telegram.
+2. Отправьте `/newbot`.
+3. Придумайте имя, затем username, заканчивающийся на `bot` (например, `my_home_proxy_bot`).
+4. **Скопируйте токен** — вида `1234567890:AAH...`. Сохраните где-нибудь.
+
+### Шаг 2 — Узнать свой Telegram ID *(30 сек)*
+
+1. Откройте [**@userinfobot**](https://t.me/userinfobot) в Telegram.
+2. Отправьте `/start`.
+3. **Скопируйте `Id`** — число вида `123456789`.
+
+### Шаг 3 — Поднять Linux VPS *(2 мин)*
+
+Подойдёт любой провайдер. Популярные:
+
+| Провайдер | От | Регион |
+|---|---|---|
+| [Hetzner](https://www.hetzner.com/cloud) | €4,15/мес | 🇩🇪 🇫🇮 🇺🇸 |
+| [PQ Hosting](https://pq.hosting/) | €3,50/мес | 🇳🇱 🇫🇷 🇸🇪 ... |
+| [Aeza](https://aeza.net/) | €3,00/мес | 🇳🇱 🇩🇪 ... |
+| DigitalOcean / Vultr / Linode | $5/мес | глобально |
+
+Выберите **Ubuntu 22.04** или **Debian 12** (x86_64 или arm64 — оба поддерживаются).
+После создания сохраните **IP-адрес** и **root-пароль**.
+
+### Шаг 4 — Скачать wizard на ноутбук *(15 сек)*
+
+Одна команда работает на macOS и Linux (автоматически определит архитектуру):
 
 ```bash
-# 1. Скачать бинарь под свою ОС из Releases
-#    https://github.com/uuigww/home-proxy/releases
+curl -fsSL https://raw.githubusercontent.com/uuigww/home-proxy/main/scripts/get.sh | bash
+```
 
-# 2. Запустить мастер
+**Windows:** скачайте [`home-proxy_*_windows_amd64.zip`](https://github.com/uuigww/home-proxy/releases/latest) со страницы релизов и распакуйте.
+
+### Шаг 5 — Запустить wizard *(30 сек)*
+
+```bash
 ./home-proxy deploy
 ```
 
-Интерактивные вопросы:
+Он спросит то, что вы собрали:
+
 ```
-? IP/хост сервера:           203.0.113.10
-? SSH user:                  root
+? IP/хост сервера:           203.0.113.10      ← IP вашего VPS
+? SSH user:                  root              ← по умолчанию, просто Enter
 ? Метод аутентификации:      › Password
-                               SSH key
-                               ssh-agent
-? Пароль:                    ••••••••
-? Токен Telegram-бота:       1234567890:AA...
-? Telegram ID админов:       111111,222222
-? Язык интерфейса:           › ru   en
+? Пароль:                    ••••••••          ← пароль от VPS
+? Токен Telegram-бота:       1234567890:AA...  ← из шага 1
+? Telegram ID админов:       123456789         ← из шага 2
+? Язык интерфейса:           › ru   en         ← выбрать
 ```
 
-Неинтерактивно (CI / автоматизация):
+Дальше увидите 8 зелёных ✓ пока wizard разворачивает всё:
+
+```
+▸ Проверяю подключение к root@203.0.113.10 ....... ✓
+▸ Определяю OS/arch ................................ Ubuntu 24.04 / amd64
+▸ Загружаю bootstrap ............................... ✓
+▸ Ставлю Xray-core ................................. ✓
+▸ Регистрирую Cloudflare Warp ...................... ✓
+▸ Генерирую Reality keypair ........................ ✓
+▸ Пишу /etc/home-proxy/config.toml ................. ✓
+▸ Включаю systemd service .......................... ✓ (active)
+▸ Sanity check: bot.getMe() ........................ ✓ @your_bot
+
+✅  Готово. Напишите /start боту @your_bot с admin-аккаунта.
+```
+
+### Шаг 6 — Поздоровайтесь с ботом 🎉
+
+1. Откройте своего бота в Telegram (найдите по `@username`).
+2. Отправьте `/start`.
+3. Появилось главное меню — нажмите **👥 Пользователи → ➕ Добавить**, чтобы создать первого юзера.
+4. Скопируйте `vless://` ссылку или QR в [Hiddify](https://github.com/hiddify/hiddify-next), [v2rayNG](https://github.com/2dust/v2rayNG) или [V2Box](https://v2box.com/) — и всё. Gemini / NotebookLM / YouTube / Поиск работают из коробки.
+
+<br>
+
+### Что делать если что-то пошло не так
+
+<details>
+<summary><b>macOS: «не удаётся открыть, так как не удалось проверить разработчика»</b></summary>
+
+Снимите quarantine-флаг один раз:
 ```bash
-./home-proxy deploy \
-  --host 203.0.113.10 \
-  --user root \
-  --password 'hunter2' \
-  --bot-token "1234567890:AA..." \
-  --admins "111111,222222" \
-  --lang ru
+xattr -d com.apple.quarantine home-proxy
+./home-proxy deploy
+```
+</details>
+
+<details>
+<summary><b>Wizard падает на «Проверяю подключение»</b></summary>
+
+Неверный IP, user или пароль. Сначала проверьте обычный SSH:
+```bash
+ssh root@<ip-вашего-vps>
+```
+Если обычный SSH не работает — wizard тоже не сработает. Чините SSH (firewall, пароль, user).
+</details>
+
+<details>
+<summary><b>Wizard падает на «bot.getMe()»</b></summary>
+
+Либо токен неверный, либо сервер не может достучаться до `api.telegram.org`. Проверьте токен в [@BotFather](https://t.me/BotFather) (`/token`). Если токен правильный — проверьте firewall VPS: исходящий HTTPS на `api.telegram.org` должен быть открыт.
+</details>
+
+<details>
+<summary><b>Потерял токен / admin ID</b></summary>
+
+На сервере: `sudo cat /etc/home-proxy/config.toml` — там всё.
+</details>
+
+<details>
+<summary><b>Как обновить home-proxy позже?</b></summary>
+
+На сервере перезапустите installer — он идемпотентный:
+```bash
+sudo /usr/local/share/home-proxy/install.sh \
+  --bot-token "…" --admins "…" --lang ru --version v0.1.1
 ```
 
-Wizard заливает бинарь, ставит Xray + wgcf, генерит Reality-ключи, пишет `/etc/home-proxy/config.toml`, ставит systemd, проверяет `bot.getMe()` — зелёные ✓ по каждому шагу стримятся в реальном времени.
+Или на `.deb`/`.rpm`: `sudo apt install ./home-proxy_0.1.1_linux_amd64.deb` (перезаписывает на месте).
+</details>
 
-### Путь B — Прямо на сервере
+<details>
+<summary><b>Как снести?</b></summary>
 
-Когда вы уже сами зашли по SSH:
+На сервере:
+```bash
+sudo /usr/local/share/home-proxy/uninstall.sh --purge
+```
+Удалит бинарь, systemd-юниты, конфиг и state. Xray-core не трогает (он может быть нужен для других сервисов).
+</details>
+
+<br>
+
+### Альтернативная установка: прямо на сервере
+
+Если вы уже зашли по SSH на VPS и предпочитаете `curl | bash`:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/uuigww/home-proxy/main/scripts/install.sh \
   | sudo bash -s -- \
       --bot-token "1234567890:AA..." \
-      --admins "111111,222222" \
+      --admins "123456789" \
       --lang ru
 ```
 
-**Требования к серверу:** Linux (Ubuntu 22.04+ / Debian 12+ тестировано), x86_64 или arm64, root, открытые порты 443 (Reality) и выбранный для SOCKS5.
+Те же флаги, что и у wizard. Полный справочник — в [`docs/install.md`](./docs/install.md).
+
+### Альтернативная установка: неинтерактивно
+
+Для CI или скриптов передайте все флаги wizard'у:
+
+```bash
+./home-proxy deploy --yes \
+  --host 203.0.113.10 \
+  --user root \
+  --password 'hunter2' \
+  --bot-token "1234567890:AA..." \
+  --admins "123456789" \
+  --lang ru
+```
 
 <br>
 
