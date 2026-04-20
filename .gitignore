@@ -8,6 +8,11 @@
 *.out
 *.prof
 
+# local Go toolchain + project-scoped module/build caches (avoid $HOME)
+/.gosdk/
+/.gocache/
+/.gopath/
+
 # go
 /vendor/
 
