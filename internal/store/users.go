@@ -18,10 +18,10 @@ func (s *Store) CreateUser(ctx context.Context, u *User) error {
 	u.CreatedAt = now
 	u.UpdatedAt = now
 	res, err := s.db.ExecContext(ctx, `
-INSERT INTO users (name, vless_uuid, socks_user, socks_pass, limit_bytes, used_bytes, enabled, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+INSERT INTO users (name, vless_uuid, socks_user, socks_pass, limit_bytes, used_bytes, enabled, mtproto_enabled, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.Name, u.VLESSUUID, u.SOCKSUser, u.SOCKSPass,
-		u.LimitBytes, u.UsedBytes, boolToInt(u.Enabled),
+		u.LimitBytes, u.UsedBytes, boolToInt(u.Enabled), boolToInt(u.MTProtoEnabled),
 		u.CreatedAt, u.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert user %q: %w", u.Name, err)
@@ -37,7 +37,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 // GetUser loads a user by primary key.
 func (s *Store) GetUser(ctx context.Context, id int64) (User, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, name, vless_uuid, socks_user, socks_pass, limit_bytes, used_bytes, enabled, created_at, updated_at
+SELECT id, name, vless_uuid, socks_user, socks_pass, limit_bytes, used_bytes, enabled, mtproto_enabled, created_at, updated_at
 FROM users WHERE id = ?`, id)
 	return scanUser(row)
 }
@@ -45,7 +45,7 @@ FROM users WHERE id = ?`, id)
 // GetUserByName loads a user by unique name.
 func (s *Store) GetUserByName(ctx context.Context, name string) (User, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, name, vless_uuid, socks_user, socks_pass, limit_bytes, used_bytes, enabled, created_at, updated_at
+SELECT id, name, vless_uuid, socks_user, socks_pass, limit_bytes, used_bytes, enabled, mtproto_enabled, created_at, updated_at
 FROM users WHERE name = ?`, name)
 	return scanUser(row)
 }
@@ -54,7 +54,7 @@ FROM users WHERE name = ?`, name)
 // are filtered out. Ordered by name ASC for stable UI listings.
 func (s *Store) ListUsers(ctx context.Context, includeDisabled bool) ([]User, error) {
 	q := `
-SELECT id, name, vless_uuid, socks_user, socks_pass, limit_bytes, used_bytes, enabled, created_at, updated_at
+SELECT id, name, vless_uuid, socks_user, socks_pass, limit_bytes, used_bytes, enabled, mtproto_enabled, created_at, updated_at
 FROM users`
 	if !includeDisabled {
 		q += ` WHERE enabled = 1`
@@ -89,10 +89,10 @@ func (s *Store) UpdateUser(ctx context.Context, u *User) error {
 	res, err := s.db.ExecContext(ctx, `
 UPDATE users SET
     name = ?, vless_uuid = ?, socks_user = ?, socks_pass = ?,
-    limit_bytes = ?, used_bytes = ?, enabled = ?, updated_at = ?
+    limit_bytes = ?, used_bytes = ?, enabled = ?, mtproto_enabled = ?, updated_at = ?
 WHERE id = ?`,
 		u.Name, u.VLESSUUID, u.SOCKSUser, u.SOCKSPass,
-		u.LimitBytes, u.UsedBytes, boolToInt(u.Enabled), u.UpdatedAt,
+		u.LimitBytes, u.UsedBytes, boolToInt(u.Enabled), boolToInt(u.MTProtoEnabled), u.UpdatedAt,
 		u.ID)
 	if err != nil {
 		return fmt.Errorf("update user %d: %w", u.ID, err)
@@ -142,6 +142,27 @@ func (s *Store) SetUserEnabled(ctx context.Context, id int64, enabled bool) erro
 	return nil
 }
 
+// SetUserMTProtoEnabled flips the MTProto UI flag and bumps updated_at.
+//
+// MTProto-enabled users see the shared tg://proxy link in the bot; mtg does
+// not enforce this at the protocol level (single shared secret).
+func (s *Store) SetUserMTProtoEnabled(ctx context.Context, id int64, on bool) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET mtproto_enabled = ?, updated_at = ? WHERE id = ?`,
+		boolToInt(on), time.Now().UTC(), id)
+	if err != nil {
+		return fmt.Errorf("set mtproto user %d: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // AddUserUsage atomically increments used_bytes by up+down. Either value may
 // be zero. Negative values are rejected.
 func (s *Store) AddUserUsage(ctx context.Context, id int64, up, down int64) error {
@@ -171,13 +192,14 @@ func scanUser(r scanRow) (User, error) {
 	var (
 		u       User
 		enabled int64
+		mtproto int64
 		vlessU  sql.NullString
 		socksU  sql.NullString
 		socksP  sql.NullString
 	)
 	err := r.Scan(
 		&u.ID, &u.Name, &vlessU, &socksU, &socksP,
-		&u.LimitBytes, &u.UsedBytes, &enabled,
+		&u.LimitBytes, &u.UsedBytes, &enabled, &mtproto,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
@@ -199,5 +221,6 @@ func scanUser(r scanRow) (User, error) {
 		u.SOCKSPass = &v
 	}
 	u.Enabled = enabled != 0
+	u.MTProtoEnabled = mtproto != 0
 	return u, nil
 }

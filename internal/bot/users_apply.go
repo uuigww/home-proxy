@@ -49,12 +49,15 @@ func (b *Bot) applyUserChange(
 // protoList returns a human-readable "+"-joined list of protocols the user
 // has enabled. Used in info notifications ("VLESS+SOCKS5").
 func protoList(u store.User) string {
-	parts := make([]string, 0, 2)
+	parts := make([]string, 0, 3)
 	if u.VLESSUUID != nil {
 		parts = append(parts, "VLESS")
 	}
 	if u.SOCKSUser != nil {
 		parts = append(parts, "SOCKS5")
+	}
+	if u.MTProtoEnabled {
+		parts = append(parts, "MTProto")
 	}
 	if len(parts) == 0 {
 		return "—"

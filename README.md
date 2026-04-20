@@ -89,6 +89,7 @@ You want a private proxy for 5–15 people — family, friends, your own devices
 ## Features
 
 - 🧦 **VLESS + Reality + SOCKS5** in a single Xray process — one port for each protocol, per-user UUIDs and credentials.
+- 📨 **Optional MTProto proxy** (via [`9seconds/mtg`](https://github.com/9seconds/mtg)) — Telegram users tap one `tg://proxy` link and the native client just works. Opt-in at install time with `--mtproto`. See [FAQ ↓](#faq).
 - 🌐 **Cloudflare Warp auto-route for Google** — Gemini, NotebookLM, YouTube, Search, Play, Maps keep working without captchas or "unusual traffic" walls. [Details ↓](#google-routing-gemini-notebooklm-youtube-search)
 - 🤖 **Telegram-native admin UI** — inline-button menus, single-message UX (one screen, no chat clutter). No web panel exists.
 - 🔔 **Proactive admin notifications** — traffic-limit warnings, service health, daily digest, security alerts. [Catalog ↓](#admin-notifications)
@@ -155,6 +156,10 @@ curl -fsSL https://raw.githubusercontent.com/uuigww/home-proxy/main/scripts/get.
 ```bash
 ./home-proxy deploy
 ```
+
+> **Optional:** add `--mtproto` when running the server-side `install.sh` to
+> enable a Telegram-native MTProto proxy alongside the VLESS stack. Details in
+> [`docs/install.md`](./docs/install.md#enabling-the-mtproto-proxy).
 
 It will ask you to paste what you gathered:
 
@@ -631,6 +636,9 @@ Only aggregate per-user byte counters (for quotas and the daily digest). No URLs
 
 **Can I migrate from 3x-ui or Marzban to home-proxy?**
 A formal migration tool isn't planned (the state model is simpler — less to import). Manually: note each user's name + approximate quota, `deploy` a fresh home-proxy, re-add users via the bot. Expect ~5 min per 10 users.
+
+**Does home-proxy support the native Telegram MTProto proxy?**
+Yes — optional, opt-in at install time. Re-run `install.sh --mtproto` (or pass it on the first run) and home-proxy will install [`9seconds/mtg`](https://github.com/9seconds/mtg), generate a Fake-TLS secret (SNI `www.google.com` by default) and expose a `tg://proxy?server=…&port=…&secret=…` link per user in the bot. Your users tap that link once and Telegram's built-in proxy dialog takes over — no sideloaded VLESS clients. A single server-wide secret is shared across all MTProto users; revocation is via the `♻ Rotate MTProto secret` button in `⚙️ Server`, which invalidates every existing link at once. See [`docs/install.md`](./docs/install.md#enabling-the-mtproto-proxy) for flags and troubleshooting.
 
 <br>
 

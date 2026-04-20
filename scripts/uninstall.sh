@@ -69,7 +69,7 @@ fi
 # -------------------------------------- step 1: stop + disable services ------
 step "1/4  stop and disable services"
 
-for unit in home-proxy.service home-proxy-geoupdate.timer home-proxy-geoupdate.service; do
+for unit in home-proxy.service home-proxy-mtg.service home-proxy-geoupdate.timer home-proxy-geoupdate.service; do
     if systemctl list-unit-files 2>/dev/null | grep -q "^${unit}"; then
         systemctl disable --now "$unit" >/dev/null 2>&1 || true
         info "disabled ${unit}"
@@ -83,6 +83,7 @@ step "2/4  remove systemd unit files"
 removed=0
 for path in \
     "${SYSTEMD_DIR}/home-proxy.service" \
+    "${SYSTEMD_DIR}/home-proxy-mtg.service" \
     "${SYSTEMD_DIR}/home-proxy-geoupdate.service" \
     "${SYSTEMD_DIR}/home-proxy-geoupdate.timer"; do
     if [[ -e "$path" ]]; then
@@ -103,6 +104,10 @@ if [[ -e "${BIN_DIR}/home-proxy" ]]; then
     rm -f "${BIN_DIR}/home-proxy"
     info "removed ${BIN_DIR}/home-proxy"
 fi
+if [[ -e "${BIN_DIR}/mtg" ]]; then
+    rm -f "${BIN_DIR}/mtg"
+    info "removed ${BIN_DIR}/mtg"
+fi
 ok "binary removed"
 
 # -------------------------------------- step 4: purge state ------------------
@@ -121,8 +126,9 @@ else
         esac
     fi
     if [[ "$PURGE" -eq 1 ]]; then
+        # $CFG_DIR contains config.toml, wgcf-* and mtg.toml; all removed together.
         rm -rf "$CFG_DIR" "$DATA_DIR"
-        info "removed ${CFG_DIR} and ${DATA_DIR}"
+        info "removed ${CFG_DIR} (incl. mtg.toml if present) and ${DATA_DIR}"
         ok "state purged"
     fi
 fi

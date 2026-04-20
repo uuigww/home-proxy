@@ -47,6 +47,31 @@ func BuildSOCKSLink(u store.User, host string, port int) string {
 		url.QueryEscape(*u.SOCKSUser), url.QueryEscape(*u.SOCKSPass), host, port)
 }
 
+// BuildMTProtoLink renders the canonical Telegram MTProto proxy deep link
+// (tg:// scheme) that native clients understand.
+//
+// Returns an empty string when either host or secret is empty so callers can
+// safely unconditionally include the result in UI flows.
+func BuildMTProtoLink(host string, port int, secret string) string {
+	if host == "" || secret == "" {
+		return ""
+	}
+	return fmt.Sprintf("tg://proxy?server=%s&port=%d&secret=%s",
+		url.QueryEscape(host), port, url.QueryEscape(secret))
+}
+
+// BuildMTProtoShareLink returns the https-flavoured tg.me URL, suitable for
+// sharing in chats where tg:// schemes render as plain text.
+//
+// Returns "" under the same conditions as BuildMTProtoLink.
+func BuildMTProtoShareLink(host string, port int, secret string) string {
+	if host == "" || secret == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://t.me/proxy?server=%s&port=%d&secret=%s",
+		url.QueryEscape(host), port, url.QueryEscape(secret))
+}
+
 // BuildQR is a placeholder: proper PNG encoding is a TODO. Today we hand the
 // raw link text back to callers so the UI can at least show it to the admin
 // (who can then feed it into their client manually).
@@ -88,11 +113,23 @@ func (b *Bot) showUserLinks(ctx context.Context, update *models.Update, payload 
 	vl := BuildVLESSLink(u, r, host, b.deps.Cfg.RealityPort)
 	sl := BuildSOCKSLink(u, host, b.deps.Cfg.SOCKSPort)
 
+	var ml, mlShare string
+	if b.deps.Cfg.MTProtoEnabled && u.MTProtoEnabled {
+		if mtg, err := b.deps.Store.GetMTGConfig(ctx); err == nil && mtg.Secret != "" {
+			mHost := b.deps.Cfg.MTProtoFakeTLSHost
+			if mHost == "" {
+				mHost = host
+			}
+			ml = BuildMTProtoLink(mHost, mtg.Port, mtg.Secret)
+			mlShare = BuildMTProtoShareLink(mHost, mtg.Port, mtg.Secret)
+		}
+	}
+
 	var sb strings.Builder
 	sb.WriteString("<b>")
 	sb.WriteString(b.deps.I18n.T(lang, "users.card.title", u.Name))
 	sb.WriteString("</b>\n")
-	if vl == "" && sl == "" {
+	if vl == "" && sl == "" && ml == "" {
 		sb.WriteString(b.deps.I18n.T(lang, "links.none"))
 	}
 	if vl != "" {
@@ -104,6 +141,19 @@ func (b *Bot) showUserLinks(ctx context.Context, update *models.Update, payload 
 		sb.WriteString("\n<code>")
 		sb.WriteString(htmlEscape(sl))
 		sb.WriteString("</code>\n")
+	}
+	if ml != "" {
+		sb.WriteString("\n<code>")
+		sb.WriteString(htmlEscape(ml))
+		sb.WriteString("</code>\n")
+		if mlShare != "" {
+			sb.WriteString("<code>")
+			sb.WriteString(htmlEscape(mlShare))
+			sb.WriteString("</code>\n")
+		}
+		sb.WriteString("<i>")
+		sb.WriteString(b.deps.I18n.T(lang, "links.mtproto_hint"))
+		sb.WriteString("</i>\n")
 	}
 	kb := markup(kbRow(btn(b.deps.I18n.T(lang, "menu.back"), CBUserCard+payload)))
 	return b.sessions.Edit(ctx, b.tg, &sess, sb.String(), kb)

@@ -19,6 +19,7 @@ type protoKind int
 const (
 	protoVLESS protoKind = iota + 1
 	protoSOCKS
+	protoMTProto
 )
 
 // parseUserID decodes a callback payload of the form "42".
@@ -79,6 +80,13 @@ func renderUserCard(b *Bot, lang string, u store.User) string {
 	} else {
 		lines = append(lines, b.deps.I18n.T(lang, "users.card.socks_off"))
 	}
+	if b.deps.Cfg.MTProtoEnabled {
+		if u.MTProtoEnabled {
+			lines = append(lines, b.deps.I18n.T(lang, "users.card.mtproto_on"))
+		} else {
+			lines = append(lines, b.deps.I18n.T(lang, "users.card.mtproto_off"))
+		}
+	}
 	lines = append(lines, b.deps.I18n.T(lang, "users.card.limit", limitHuman(b, lang, u.LimitBytes)))
 	lines = append(lines, b.deps.I18n.T(lang, "users.card.used", humanBytes(u.UsedBytes), percent(u.UsedBytes, u.LimitBytes)))
 	lines = append(lines, b.deps.I18n.T(lang, "users.card.created", u.CreatedAt.Format("2006-01-02")))
@@ -100,6 +108,14 @@ func renderUserCardKeyboard(b *Bot, lang string, u store.User) *models.InlineKey
 		btn(vlessLabel, CBUserToggleV+id),
 		btn(socksLabel, CBUserToggleS+id),
 	)
+	var mtprotoRow []models.InlineKeyboardButton
+	if b.deps.Cfg.MTProtoEnabled {
+		mtprotoLabel := b.deps.I18n.T(lang, "users.card.mtproto_off")
+		if u.MTProtoEnabled {
+			mtprotoLabel = b.deps.I18n.T(lang, "users.card.mtproto_on")
+		}
+		mtprotoRow = kbRow(btn(mtprotoLabel, CBUserToggleMTProto+id))
+	}
 	actionRow := kbRow(
 		btn(b.deps.I18n.T(lang, "users.card.links"), CBUserLinks+id),
 		btn(b.deps.I18n.T(lang, "users.card.qr"), CBUserQR+id),
@@ -116,12 +132,16 @@ func renderUserCardKeyboard(b *Bot, lang string, u store.User) *models.InlineKey
 			btn(b.deps.I18n.T(lang, "users.card.delete"), CBUserDelete+id),
 		)
 	}
-	return markup(
-		toggleRow,
+	rows := [][]models.InlineKeyboardButton{toggleRow}
+	if mtprotoRow != nil {
+		rows = append(rows, mtprotoRow)
+	}
+	rows = append(rows,
 		actionRow,
 		stateRow,
 		kbRow(btn(b.deps.I18n.T(lang, "menu.back"), CBUsersList+"0")),
 	)
+	return markup(rows...)
 }
 
 // toggleUserProto flips VLESS or SOCKS on the given user atomically.
@@ -255,6 +275,36 @@ func (b *Bot) setUserEnabled(ctx context.Context, update *models.Update, payload
 	} else {
 		b.notifyInfo(ctx, update, "user.disabled", tgID, u.Name)
 	}
+	return b.showUserCard(ctx, update, payload)
+}
+
+// toggleUserMTProto flips the MTProto UI flag for a user.
+//
+// Unlike toggleUserProto, there is no Xray side-effect: mtg is a separate
+// process that uses a single server-wide secret. The DB flag only controls
+// whether the bot exposes the tg://proxy link for this user.
+func (b *Bot) toggleUserMTProto(ctx context.Context, update *models.Update, payload string) error {
+	tgID := updateTGID(update)
+	if !b.deps.Cfg.MTProtoEnabled {
+		return b.answerInfo(ctx, update, "server.mtproto_disabled")
+	}
+	id, err := parseUserID(payload)
+	if err != nil {
+		return err
+	}
+	u, err := b.deps.Store.GetUser(ctx, id)
+	if err != nil {
+		return err
+	}
+	oldProtos := protoList(u)
+	newOn := !u.MTProtoEnabled
+	if err := b.deps.Store.SetUserMTProtoEnabled(ctx, id, newOn); err != nil {
+		b.deps.Log.Error("bot: toggle mtproto", "err", err, "user", u.Name)
+		return err
+	}
+	u.MTProtoEnabled = newOn
+	newProtos := protoList(u)
+	b.notifyInfo(ctx, update, "user.protocols_changed", tgID, u.Name, oldProtos, newProtos)
 	return b.showUserCard(ctx, update, payload)
 }
 

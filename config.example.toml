@@ -14,3 +14,8 @@ default_lang = "ru"              # "ru" or "en"
 # reality_server_name = "www.google.com"
 # socks_port          = 1080
 # reality_port        = 443
+
+# --- optional MTProto proxy (9seconds/mtg), opt-in via install.sh --mtproto ---
+# mtproto_enabled       = false
+# mtproto_port          = 8443
+# mtproto_fake_tls_host = "www.google.com"

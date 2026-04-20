@@ -63,6 +63,43 @@ FROM warp_peer WHERE id = 1`)
 	return p, nil
 }
 
+// GetMTGConfig returns the singleton mtg_config row, or ErrNotFound.
+func (s *Store) GetMTGConfig(ctx context.Context) (MTGConfig, error) {
+	row := s.db.QueryRowContext(ctx, `
+SELECT secret, port, fake_tls_host, updated_at
+FROM mtg_config WHERE id = 1`)
+	var c MTGConfig
+	err := row.Scan(&c.Secret, &c.Port, &c.FakeTLSHost, &c.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return MTGConfig{}, ErrNotFound
+		}
+		return MTGConfig{}, fmt.Errorf("get mtg config: %w", err)
+	}
+	return c, nil
+}
+
+// SaveMTGConfig overwrites (or inserts) the singleton mtg_config row.
+//
+// UpdatedAt is refreshed to now. Port and FakeTLSHost must be populated by
+// the caller; Secret is stored verbatim (hex-encoded by mtg).
+func (s *Store) SaveMTGConfig(ctx context.Context, c MTGConfig) error {
+	c.UpdatedAt = time.Now().UTC()
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO mtg_config (id, secret, port, fake_tls_host, updated_at)
+VALUES (1, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET
+    secret = excluded.secret,
+    port = excluded.port,
+    fake_tls_host = excluded.fake_tls_host,
+    updated_at = excluded.updated_at`,
+		c.Secret, c.Port, c.FakeTLSHost, c.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("save mtg config: %w", err)
+	}
+	return nil
+}
+
 // SaveWarpPeer overwrites (or inserts) the singleton warp_peer row.
 // UpdatedAt is refreshed to now; a zero MTU defaults to 1280.
 func (s *Store) SaveWarpPeer(ctx context.Context, p WarpPeer) error {

@@ -25,19 +25,32 @@ type Config struct {
 	RealityServerName string `toml:"reality_server_name"`
 	SOCKSPort         int    `toml:"socks_port"`
 	RealityPort       int    `toml:"reality_port"`
+
+	// MTProto (optional, opt-in at install time).
+	//
+	// When MTProtoEnabled is true, the daemon assumes a companion mtg
+	// (9seconds/mtg) systemd unit is managing /etc/home-proxy/mtg.toml on
+	// MTProtoPort with the Fake-TLS host MTProtoFakeTLSHost. The bot exposes
+	// the tg://proxy link in the Links and Server screens.
+	MTProtoEnabled     bool   `toml:"mtproto_enabled"`
+	MTProtoPort        int    `toml:"mtproto_port"`
+	MTProtoFakeTLSHost string `toml:"mtproto_fake_tls_host"`
 }
 
 // Defaults returns a Config pre-filled with production defaults.
 func Defaults() Config {
 	return Config{
-		DefaultLang:       "ru",
-		DataDir:           "/var/lib/home-proxy",
-		XrayAPI:           "127.0.0.1:10085",
-		XrayConfig:        "/usr/local/etc/xray/config.json",
-		RealityDest:       "www.google.com:443",
-		RealityServerName: "www.google.com",
-		SOCKSPort:         1080,
-		RealityPort:       443,
+		DefaultLang:        "ru",
+		DataDir:            "/var/lib/home-proxy",
+		XrayAPI:            "127.0.0.1:10085",
+		XrayConfig:         "/usr/local/etc/xray/config.json",
+		RealityDest:        "www.google.com:443",
+		RealityServerName:  "www.google.com",
+		SOCKSPort:          1080,
+		RealityPort:        443,
+		MTProtoEnabled:     false,
+		MTProtoPort:        8443,
+		MTProtoFakeTLSHost: "www.google.com",
 	}
 }
 
@@ -69,6 +82,14 @@ func (c Config) Validate() error {
 	case "ru", "en":
 	default:
 		return fmt.Errorf("default_lang must be 'ru' or 'en', got %q", c.DefaultLang)
+	}
+	if c.MTProtoEnabled {
+		if c.MTProtoPort < 1 || c.MTProtoPort > 65535 {
+			return fmt.Errorf("mtproto_port must be 1..65535, got %d", c.MTProtoPort)
+		}
+		if strings.TrimSpace(c.MTProtoFakeTLSHost) == "" {
+			return fmt.Errorf("mtproto_fake_tls_host is required when mtproto_enabled=true")
+		}
 	}
 	return nil
 }

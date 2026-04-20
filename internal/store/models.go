@@ -6,17 +6,22 @@ import "time"
 //
 // VLESSUUID, SOCKSUser and SOCKSPass are pointers because a user may have only
 // one of the two protocols enabled. LimitBytes = 0 means "no quota".
+//
+// MTProtoEnabled is a UI-only flag: when true, the bot exposes the shared
+// MTProto link to this user. mtg uses a single server-wide secret (see
+// MTGConfig) so this flag does not translate to any per-user enforcement.
 type User struct {
-	ID         int64
-	Name       string
-	VLESSUUID  *string
-	SOCKSUser  *string
-	SOCKSPass  *string
-	LimitBytes int64
-	UsedBytes  int64
-	Enabled    bool
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID             int64
+	Name           string
+	VLESSUUID      *string
+	SOCKSUser      *string
+	SOCKSPass      *string
+	LimitBytes     int64
+	UsedBytes      int64
+	Enabled        bool
+	MTProtoEnabled bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 // AdminPrefs captures per-admin notification and locale preferences.
@@ -81,6 +86,19 @@ type WarpPeer struct {
 	Endpoint      string
 	MTU           int
 	UpdatedAt     time.Time
+}
+
+// MTGConfig is the singleton row from the mtg_config table.
+//
+// A single hex-encoded Fake-TLS secret is shared across all allowed MTProto
+// users; revocation is achieved by rotating the secret (and restarting the
+// mtg systemd unit). Port is the TCP port mtg binds to (default 8443);
+// FakeTLSHost is the whitelisted SNI host mtg pretends to be.
+type MTGConfig struct {
+	Secret      string
+	FakeTLSHost string
+	Port        int
+	UpdatedAt   time.Time
 }
 
 // DefaultNotifyFlags is the canonical default set of per-admin preferences.

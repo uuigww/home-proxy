@@ -116,6 +116,12 @@ func (b *Bot) addWizardToggleProto(ctx context.Context, update *models.Update, k
 		key = "vless"
 	case protoSOCKS:
 		key = "socks"
+	case protoMTProto:
+		if !b.deps.Cfg.MTProtoEnabled {
+			// MTProto not installed on this server: silently ignore.
+			return b.renderAddStep2(ctx, update, &sess, ws)
+		}
+		key = "mtproto"
 	}
 	cur, _ := ws.Data[key].(bool)
 	ws.Data[key] = !cur
@@ -138,7 +144,8 @@ func (b *Bot) addWizardNext(ctx context.Context, update *models.Update) error {
 	}
 	vless, _ := ws.Data["vless"].(bool)
 	socks, _ := ws.Data["socks"].(bool)
-	if !vless && !socks {
+	mtproto, _ := ws.Data["mtproto"].(bool)
+	if !vless && !socks && !mtproto {
 		// Re-render step 2 with an inline error hint.
 		return b.renderAddStep2Err(ctx, update, &sess, ws, "wizard.add.proto_none")
 	}
@@ -216,20 +223,25 @@ func (b *Bot) renderAddStep2Err(ctx context.Context, update *models.Update, sess
 	lang := b.adminLang(ctx, updateTGID(update))
 	vless, _ := ws.Data["vless"].(bool)
 	socks, _ := ws.Data["socks"].(bool)
+	mtproto, _ := ws.Data["mtproto"].(bool)
 	text := fmt.Sprintf("<b>%s</b>\n%s",
 		b.deps.I18n.T(lang, "wizard.add.step2_title"),
 		b.deps.I18n.T(lang, "wizard.add.step2_prompt"))
 	if errKey != "" {
 		text += "\n<i>" + b.deps.I18n.T(lang, errKey) + "</i>"
 	}
-	kb := markup(
+	rows := [][]models.InlineKeyboardButton{
 		kbRow(btn(mark(vless)+b.deps.I18n.T(lang, "wizard.add.proto_vless"), CBAddProtoVLESS)),
 		kbRow(btn(mark(socks)+b.deps.I18n.T(lang, "wizard.add.proto_socks"), CBAddProtoSOCKS)),
-		kbRow(
-			btn(b.deps.I18n.T(lang, "menu.next"), CBAddNext),
-			btn(b.deps.I18n.T(lang, "menu.cancel"), CBAddCancel),
-		),
-	)
+	}
+	if b.deps.Cfg.MTProtoEnabled {
+		rows = append(rows, kbRow(btn(mark(mtproto)+b.deps.I18n.T(lang, "wizard.add.proto_mtproto"), CBAddProtoMTProto)))
+	}
+	rows = append(rows, kbRow(
+		btn(b.deps.I18n.T(lang, "menu.next"), CBAddNext),
+		btn(b.deps.I18n.T(lang, "menu.cancel"), CBAddCancel),
+	))
+	kb := markup(rows...)
 	return b.sessions.Edit(ctx, b.tg, sess, text, kb)
 }
 
@@ -262,6 +274,7 @@ func (b *Bot) finishAddWizard(ctx context.Context, update *models.Update, sess *
 	name, _ := ws.Data["name"].(string)
 	vless, _ := ws.Data["vless"].(bool)
 	socks, _ := ws.Data["socks"].(bool)
+	mtproto, _ := ws.Data["mtproto"].(bool)
 	gbFloat, _ := ws.Data["limit_gb"].(float64)
 	limitBytes := int64(gbFloat) * 1024 * 1024 * 1024
 
@@ -279,6 +292,10 @@ func (b *Bot) finishAddWizard(ctx context.Context, update *models.Update, sess *
 		pass := newSOCKSPass()
 		u.SOCKSUser = &user
 		u.SOCKSPass = &pass
+	}
+	// MTProto is a UI-only flag; mtg shares a server-wide secret.
+	if mtproto && b.deps.Cfg.MTProtoEnabled {
+		u.MTProtoEnabled = true
 	}
 	if err := b.deps.Store.CreateUser(ctx, u); err != nil {
 		return fmt.Errorf("create user: %w", err)

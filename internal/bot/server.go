@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -56,14 +57,60 @@ func (b *Bot) showServer(ctx context.Context, update *models.Update) error {
 	sb.WriteString(b.deps.I18n.T(lang, "server.reality_keys", realityLbl))
 	sb.WriteString("\n")
 	sb.WriteString(b.deps.I18n.T(lang, "server.warp_status", warpLbl))
+	sb.WriteString("\n")
+	b.appendMTProtoStatus(ctx, &sb, lang)
 
-	kb := markup(
+	rows := [][]models.InlineKeyboardButton{
 		kbRow(btn(b.deps.I18n.T(lang, "server.rotate_reality"), CBServerRotate)),
+	}
+	if b.deps.Cfg.MTProtoEnabled {
+		rows = append(rows, kbRow(btn(b.deps.I18n.T(lang, "server.mtproto_rotate"), CBServerRotateMTProto)))
+	}
+	rows = append(rows,
 		kbRow(btn(b.deps.I18n.T(lang, "server.update_geo"), CBServerUpdateGeo)),
 		kbRow(btn(b.deps.I18n.T(lang, "server.notifications"), CBServerNotifications)),
 		backRow(b.deps.I18n.T(lang, "menu.back")),
 	)
+	kb := markup(rows...)
 	return b.sessions.Edit(ctx, b.tg, &sess, sb.String(), kb)
+}
+
+// appendMTProtoStatus renders a compact MTProto info block on the server
+// screen — status, port, Fake-TLS host, truncated secret tail — or a single
+// "not installed" hint when the operator didn't opt in at install time.
+func (b *Bot) appendMTProtoStatus(ctx context.Context, sb *strings.Builder, lang string) {
+	if !b.deps.Cfg.MTProtoEnabled {
+		sb.WriteString(b.deps.I18n.T(lang, "server.mtproto_disabled"))
+		sb.WriteString("\n")
+		return
+	}
+	pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	status := b.deps.I18n.T(lang, "server.xray_offline")
+	if out, err := exec.CommandContext(pingCtx, "systemctl", "is-active", "home-proxy-mtg.service").Output(); err == nil {
+		if strings.TrimSpace(string(out)) == "active" {
+			status = b.deps.I18n.T(lang, "server.xray_online")
+		}
+	}
+	sb.WriteString(b.deps.I18n.T(lang, "server.mtproto_status", status))
+	sb.WriteString("\n")
+	sb.WriteString(b.deps.I18n.T(lang, "server.mtproto_port", b.deps.Cfg.MTProtoPort))
+	sb.WriteString("\n")
+	sb.WriteString(b.deps.I18n.T(lang, "server.mtproto_fake_tls", b.deps.Cfg.MTProtoFakeTLSHost))
+	sb.WriteString("\n")
+	if mtg, err := b.deps.Store.GetMTGConfig(ctx); err == nil && mtg.Secret != "" {
+		sb.WriteString(b.deps.I18n.T(lang, "server.mtproto_secret", truncateSecret(mtg.Secret)))
+		sb.WriteString("\n")
+	}
+}
+
+// truncateSecret returns the last 6 hex chars of secret for visual display.
+// Never log or expose the full secret — revocation relies on it being opaque.
+func truncateSecret(secret string) string {
+	if len(secret) <= 6 {
+		return "***"
+	}
+	return "…" + secret[len(secret)-6:]
 }
 
 // showNotifSettings renders the 🔔 Notifications screen for the admin's own

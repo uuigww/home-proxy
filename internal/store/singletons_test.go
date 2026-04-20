@@ -63,6 +63,63 @@ VALUES (2, '', '', '', '', '', ?)`, time.Now().UTC())
 	}
 }
 
+func TestMTGConfigSingleton(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+
+	if _, err := s.GetMTGConfig(ctx); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on empty store, got %v", err)
+	}
+
+	c := MTGConfig{
+		Secret:      "ee0123456789abcdef",
+		Port:        8443,
+		FakeTLSHost: "www.google.com",
+	}
+	if err := s.SaveMTGConfig(ctx, c); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	got, err := s.GetMTGConfig(ctx)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Secret != c.Secret || got.Port != c.Port || got.FakeTLSHost != c.FakeTLSHost {
+		t.Fatalf("unexpected mtg config round-trip: %+v", got)
+	}
+	if got.UpdatedAt.IsZero() {
+		t.Fatal("UpdatedAt was not refreshed")
+	}
+
+	// Upsert must overwrite not duplicate.
+	c.Secret = "eedeadbeefcafebabe"
+	if err := s.SaveMTGConfig(ctx, c); err != nil {
+		t.Fatalf("resave: %v", err)
+	}
+	got2, _ := s.GetMTGConfig(ctx)
+	if got2.Secret != "eedeadbeefcafebabe" {
+		t.Fatalf("update not persisted: %+v", got2)
+	}
+
+	var n int
+	if err := s.DB().QueryRow(`SELECT COUNT(*) FROM mtg_config`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 mtg_config row, got %d", n)
+	}
+
+	// CHECK(id=1) must reject id=2.
+	_, err = s.DB().Exec(`INSERT INTO mtg_config (id, secret, port, fake_tls_host, updated_at)
+VALUES (2, 'x', 1, 'h', ?)`, time.Now().UTC())
+	if err == nil {
+		t.Fatal("expected CHECK(id=1) to reject id=2 insert")
+	}
+	le := strings.ToLower(err.Error())
+	if !strings.Contains(le, "check") && !strings.Contains(le, "constraint") {
+		t.Fatalf("expected constraint error, got %v", err)
+	}
+}
+
 func TestWarpSingleton(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()

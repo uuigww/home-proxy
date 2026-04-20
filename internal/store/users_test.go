@@ -111,6 +111,52 @@ func TestUpdateUserMissingIDRejected(t *testing.T) {
 	}
 }
 
+func TestUserMTProtoRoundTrip(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+
+	u := &User{Name: "dan", Enabled: true, MTProtoEnabled: true}
+	if err := s.CreateUser(ctx, u); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, err := s.GetUser(ctx, u.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !got.MTProtoEnabled {
+		t.Fatalf("MTProtoEnabled not persisted on create")
+	}
+
+	if err := s.SetUserMTProtoEnabled(ctx, u.ID, false); err != nil {
+		t.Fatalf("set mtproto off: %v", err)
+	}
+	got2, _ := s.GetUser(ctx, u.ID)
+	if got2.MTProtoEnabled {
+		t.Fatalf("SetUserMTProtoEnabled(false) did not take effect")
+	}
+	if err := s.SetUserMTProtoEnabled(ctx, u.ID, true); err != nil {
+		t.Fatalf("set mtproto on: %v", err)
+	}
+	got3, _ := s.GetUser(ctx, u.ID)
+	if !got3.MTProtoEnabled {
+		t.Fatalf("SetUserMTProtoEnabled(true) did not take effect")
+	}
+
+	// UpdateUser round-trip preserves the flag.
+	got3.MTProtoEnabled = false
+	if err := s.UpdateUser(ctx, &got3); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	got4, _ := s.GetUser(ctx, u.ID)
+	if got4.MTProtoEnabled {
+		t.Fatalf("UpdateUser did not persist MTProtoEnabled=false")
+	}
+
+	if err := s.SetUserMTProtoEnabled(ctx, 99999, true); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}
+
 func TestAddUserUsageAdditive(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()

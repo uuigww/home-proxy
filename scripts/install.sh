@@ -3,9 +3,10 @@
 # home-proxy server-side installer.
 #
 # Installs Xray-core (via the official XTLS/Xray-install script), wgcf (for
-# Cloudflare Warp registration), the home-proxy binary and its systemd units
-# (service + weekly geoupdate timer), writes /etc/home-proxy/config.toml and
-# starts everything.
+# Cloudflare Warp registration), optionally the MTProto proxy mtg
+# (9seconds/mtg), the home-proxy binary and its systemd units (service +
+# weekly geoupdate timer), writes /etc/home-proxy/config.toml and starts
+# everything.
 #
 # Re-running is safe: every step checks current state first, so the installer
 # is fully idempotent.
@@ -15,7 +16,8 @@
 #     | sudo bash -s -- \
 #         --bot-token "123456:AA..." \
 #         --admins   "111,222" \
-#         --lang     ru
+#         --lang     ru \
+#         --mtproto
 #
 set -euo pipefail
 
@@ -63,6 +65,9 @@ LANG_CODE="ru"
 VERSION=""
 NO_WARP=0
 REALITY_DEST="www.google.com"
+MTPROTO_ENABLED=0
+MTPROTO_PORT=8443
+MTPROTO_FAKE_TLS_HOST="www.google.com"
 
 usage() {
     cat <<USAGE
@@ -77,19 +82,26 @@ Optional:
   --version      vX.Y.Z    Pin binary version (default: latest GitHub release)
   --no-warp                Skip Warp registration (Google/geoip-fallback disabled)
   --reality-dest HOST      Reality dest/server-name hostname (default: www.google.com)
+  --mtproto                Install + enable the MTProto proxy (9seconds/mtg)
+  --mtproto-port PORT      TCP port for mtg (default: 8443)
+  --mtproto-fake-tls-host HOST
+                           Fake-TLS SNI host for mtg (default: www.google.com)
   -h, --help               Show this help
 USAGE
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --bot-token)     BOT_TOKEN="${2:-}";    shift 2 ;;
-        --admins)        ADMINS="${2:-}";       shift 2 ;;
-        --lang)          LANG_CODE="${2:-}";    shift 2 ;;
-        --version)       VERSION="${2:-}";      shift 2 ;;
-        --reality-dest)  REALITY_DEST="${2:-}"; shift 2 ;;
-        --no-warp)       NO_WARP=1;             shift ;;
-        -h|--help)       usage; exit 0 ;;
+        --bot-token)             BOT_TOKEN="${2:-}";             shift 2 ;;
+        --admins)                ADMINS="${2:-}";                shift 2 ;;
+        --lang)                  LANG_CODE="${2:-}";             shift 2 ;;
+        --version)               VERSION="${2:-}";               shift 2 ;;
+        --reality-dest)          REALITY_DEST="${2:-}";          shift 2 ;;
+        --no-warp)               NO_WARP=1;                      shift ;;
+        --mtproto)               MTPROTO_ENABLED=1;              shift ;;
+        --mtproto-port)          MTPROTO_PORT="${2:-}";          shift 2 ;;
+        --mtproto-fake-tls-host) MTPROTO_FAKE_TLS_HOST="${2:-}"; shift 2 ;;
+        -h|--help)               usage; exit 0 ;;
         *) printf 'unknown flag: %s\n' "$1" >&2; usage; exit 2 ;;
     esac
 done
@@ -105,8 +117,17 @@ case "$LANG_CODE" in
     *) die "--lang must be 'ru' or 'en' (got '${LANG_CODE}')" ;;
 esac
 
+if [[ "$MTPROTO_ENABLED" -eq 1 ]]; then
+    if ! [[ "$MTPROTO_PORT" =~ ^[0-9]+$ ]] || (( MTPROTO_PORT < 1 || MTPROTO_PORT > 65535 )); then
+        die "--mtproto-port must be an integer 1..65535 (got '${MTPROTO_PORT}')"
+    fi
+    if [[ -z "$MTPROTO_FAKE_TLS_HOST" ]]; then
+        die "--mtproto-fake-tls-host must not be empty when --mtproto is set"
+    fi
+fi
+
 # ----------------------------------------------------- step 1: preflight -----
-step "1/11  preflight"
+step "1/12  preflight"
 
 if [[ "${EUID}" -ne 0 ]]; then
     die "installer must run as root (use sudo)"
@@ -155,7 +176,7 @@ ensure_pkg tar
 ok "preflight passed"
 
 # --------------------------------------------- step 2: install Xray-core -----
-step "2/11  install Xray-core"
+step "2/12  install Xray-core"
 
 if command -v xray >/dev/null 2>&1 && systemctl list-unit-files 2>/dev/null | grep -q '^xray\.service'; then
     info "xray already installed ($(xray -version 2>/dev/null | head -n1 || echo 'version unknown'))"
@@ -168,10 +189,10 @@ ok "xray-core ready"
 
 # --------------------------------------------- step 3: wgcf / Warp -----------
 if [[ "$NO_WARP" -eq 1 ]]; then
-    step "3/11  wgcf / Warp  (skipped by --no-warp)"
+    step "3/12  wgcf / Warp  (skipped by --no-warp)"
     warn "Warp disabled — Google-routed traffic won't have a Warp egress"
 else
-    step "3/11  install wgcf and register Warp"
+    step "3/12  install wgcf and register Warp"
 
     install_wgcf() {
         info "fetching latest wgcf release metadata"
@@ -222,8 +243,78 @@ else
     ok "wgcf/Warp ready"
 fi
 
-# --------------------------------------------- step 4: home-proxy binary -----
-step "4/11  download home-proxy binary"
+# --------------------------------------------- step 4: MTProto / mtg ---------
+install_mtg() {
+    info "fetching latest mtg release metadata"
+    local meta tag asset_url
+    meta=$(curl -fsSL \
+        -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/repos/9seconds/mtg/releases/latest")
+    tag=$(printf '%s' "$meta" | jq -r '.tag_name')
+    asset_url=$(printf '%s' "$meta" \
+        | jq -r --arg a "$ARCH" \
+            '.assets[] | select(.name | test("linux-" + $a + "\\.tar\\.gz$")) | .browser_download_url' \
+        | head -n1)
+    if [[ -z "$asset_url" || "$asset_url" == "null" ]]; then
+        die "could not find mtg linux-${ARCH}.tar.gz asset in release ${tag}"
+    fi
+    info "downloading mtg ${tag} (${asset_url##*/})"
+    local tmp_dir
+    tmp_dir="$(mktemp -d)"
+    curl -fsSL -o "${tmp_dir}/mtg.tar.gz" "$asset_url"
+    tar -xzf "${tmp_dir}/mtg.tar.gz" -C "${tmp_dir}"
+    local mtg_bin
+    mtg_bin=$(find "${tmp_dir}" -type f -name mtg | head -n1)
+    if [[ -z "$mtg_bin" ]]; then
+        rm -rf "${tmp_dir}"
+        die "mtg binary not found inside ${asset_url##*/}"
+    fi
+    install -o root -g root -m 0755 "${mtg_bin}" "${BIN_DIR}/mtg"
+    rm -rf "${tmp_dir}"
+}
+
+if [[ "$MTPROTO_ENABLED" -eq 1 ]]; then
+    step "4/12  MTProto / mtg  (Fake-TLS host ${MTPROTO_FAKE_TLS_HOST}, port ${MTPROTO_PORT})"
+
+    if command -v mtg >/dev/null 2>&1; then
+        info "mtg already installed at $(command -v mtg) ($(mtg --version 2>/dev/null | head -n1 || echo 'unknown'))"
+    else
+        install_mtg
+    fi
+
+    mkdir -p "$CFG_DIR"
+    chmod 750 "$CFG_DIR"
+
+    MTG_CFG="${CFG_DIR}/mtg.toml"
+    if [[ -f "$MTG_CFG" ]] && grep -q '^secret\s*=' "$MTG_CFG"; then
+        info "reusing existing secret from ${MTG_CFG}"
+        MTG_SECRET=$(grep -E '^secret\s*=' "$MTG_CFG" | head -n1 | sed -E 's/^secret\s*=\s*"(.*)"\s*$/\1/')
+    else
+        info "generating Fake-TLS secret"
+        MTG_SECRET=$(mtg generate-secret --hex "$MTPROTO_FAKE_TLS_HOST")
+    fi
+
+    if [[ -z "$MTG_SECRET" ]]; then
+        die "mtg generate-secret produced empty output"
+    fi
+
+    umask 077
+    cat > "$MTG_CFG" <<MTG
+secret = "${MTG_SECRET}"
+bind-to = "0.0.0.0:${MTPROTO_PORT}"
+MTG
+    chmod 600 "$MTG_CFG"
+    chown root:root "$MTG_CFG"
+    info "wrote ${MTG_CFG}"
+
+    ok "mtg ready"
+else
+    step "4/12  MTProto / mtg  (skipped — pass --mtproto to enable)"
+    info "re-run install.sh with --mtproto to install 9seconds/mtg alongside Xray"
+fi
+
+# --------------------------------------------- step 5: home-proxy binary -----
+step "5/12  download home-proxy binary"
 
 resolve_version() {
     if [[ -n "$VERSION" ]]; then
@@ -278,8 +369,8 @@ fi
 install -o root -g root -m 0755 "${TMP_DIR}/home-proxy" "${BIN_DIR}/home-proxy"
 ok "installed ${BIN_DIR}/home-proxy"
 
-# --------------------------------------------- step 5: directories -----------
-step "5/11  create data / config / log directories"
+# --------------------------------------------- step 6: directories -----------
+step "6/12  create data / config / log directories"
 
 install -o root -g root -m 0750 -d "$DATA_DIR"
 install -o root -g root -m 0750 -d "$CFG_DIR"
@@ -287,22 +378,27 @@ install -o root -g root -m 0755 -d "$LOG_DIR"
 install -o root -g root -m 0755 -d "$GEO_DATA_DIR"
 ok "dirs ready: ${DATA_DIR}, ${CFG_DIR}, ${LOG_DIR}"
 
-# --------------------------------------------- step 6: config.toml -----------
-step "6/11  write ${CFG_DIR}/config.toml"
+# --------------------------------------------- step 7: config.toml -----------
+step "7/12  write ${CFG_DIR}/config.toml"
 
 CFG_FILE="${CFG_DIR}/config.toml"
 SENTINEL="# installed by home-proxy install.sh"
 
 write_config() {
     umask 077
-    cat > "$CFG_FILE" <<CFG
-${SENTINEL}
-bot_token    = "${BOT_TOKEN}"
-admins       = [${ADMINS}]
-default_lang = "${LANG_CODE}"
-reality_dest = "${REALITY_DEST}:443"
-reality_server_name = "${REALITY_DEST}"
-CFG
+    {
+        printf '%s\n' "${SENTINEL}"
+        printf 'bot_token    = "%s"\n' "${BOT_TOKEN}"
+        printf 'admins       = [%s]\n' "${ADMINS}"
+        printf 'default_lang = "%s"\n' "${LANG_CODE}"
+        printf 'reality_dest = "%s:443"\n' "${REALITY_DEST}"
+        printf 'reality_server_name = "%s"\n' "${REALITY_DEST}"
+        if [[ "$MTPROTO_ENABLED" -eq 1 ]]; then
+            printf 'mtproto_enabled       = true\n'
+            printf 'mtproto_port          = %d\n' "${MTPROTO_PORT}"
+            printf 'mtproto_fake_tls_host = "%s"\n' "${MTPROTO_FAKE_TLS_HOST}"
+        fi
+    } > "$CFG_FILE"
     chmod 600 "$CFG_FILE"
     chown root:root "$CFG_FILE"
 }
@@ -322,8 +418,8 @@ else
     ok "${CFG_FILE} written"
 fi
 
-# --------------------------------------------- step 7: systemd unit ----------
-step "7/11  install systemd unit"
+# --------------------------------------------- step 8: systemd unit ----------
+step "8/12  install systemd unit"
 
 download_unit() {
     local name="$1"
@@ -344,8 +440,13 @@ download_unit() {
 download_unit "home-proxy.service" "${SYSTEMD_DIR}/home-proxy.service" 0644
 ok "home-proxy.service installed"
 
-# --------------------------------------------- step 8: geoupdate timer -------
-step "8/11  install weekly geosite/geoip update timer"
+if [[ "$MTPROTO_ENABLED" -eq 1 ]]; then
+    download_unit "home-proxy-mtg.service" "${SYSTEMD_DIR}/home-proxy-mtg.service" 0644
+    ok "home-proxy-mtg.service installed"
+fi
+
+# --------------------------------------------- step 9: geoupdate timer -------
+step "9/12  install weekly geosite/geoip update timer"
 
 download_unit "home-proxy-geoupdate.service" "${SYSTEMD_DIR}/home-proxy-geoupdate.service" 0644
 download_unit "home-proxy-geoupdate.timer"   "${SYSTEMD_DIR}/home-proxy-geoupdate.timer"   0644
@@ -353,8 +454,8 @@ ok "home-proxy-geoupdate.{service,timer} installed"
 
 systemctl daemon-reload
 
-# --------------------------------------------- step 9: enable + start --------
-step "9/11  enable and start services"
+# --------------------------------------------- step 10: enable + start -------
+step "10/12 enable and start services"
 
 systemctl enable --now xray.service >/dev/null
 info "xray.service: $(systemctl is-active xray.service || true)"
@@ -362,12 +463,17 @@ info "xray.service: $(systemctl is-active xray.service || true)"
 systemctl enable --now home-proxy.service >/dev/null
 info "home-proxy.service: $(systemctl is-active home-proxy.service || true)"
 
+if [[ "$MTPROTO_ENABLED" -eq 1 ]]; then
+    systemctl enable --now home-proxy-mtg.service >/dev/null
+    info "home-proxy-mtg.service: $(systemctl is-active home-proxy-mtg.service || true)"
+fi
+
 systemctl enable --now home-proxy-geoupdate.timer >/dev/null
 info "home-proxy-geoupdate.timer: $(systemctl is-active home-proxy-geoupdate.timer || true)"
 ok "services enabled and started"
 
-# --------------------------------------------- step 10: bot sanity check -----
-step "10/11 verify bot token against Telegram API"
+# --------------------------------------------- step 11: bot sanity check -----
+step "11/12 verify bot token against Telegram API"
 
 BOT_RESP_FILE="$(mktemp)"
 if ! curl -fsSL --max-time 15 \
@@ -388,8 +494,16 @@ BOT_DISPLAY=$(jq -r '.result.first_name' "$BOT_RESP_FILE")
 rm -f "$BOT_RESP_FILE"
 ok "bot verified: @${BOT_USERNAME} (${BOT_DISPLAY})"
 
-# --------------------------------------------- step 11: summary --------------
-step "11/11 done"
+# --------------------------------------------- step 12: summary --------------
+step "12/12 done"
+
+MTPROTO_LINE=""
+if [[ "$MTPROTO_ENABLED" -eq 1 ]]; then
+    MTPROTO_LINE="
+  MTProto:        port ${MTPROTO_PORT} · Fake-TLS ${MTPROTO_FAKE_TLS_HOST}
+  MTG config:     ${CFG_DIR}/mtg.toml
+  MTG unit:       ${SYSTEMD_DIR}/home-proxy-mtg.service"
+fi
 
 cat <<SUMMARY
 
@@ -404,7 +518,7 @@ ${C_GREEN}${C_BOLD}home-proxy ${RELEASE_TAG} installed successfully.${C_RESET}
   Data dir:       ${DATA_DIR}
   Log dir:        ${LOG_DIR}
   Unit:           ${SYSTEMD_DIR}/home-proxy.service
-  Geoupdate:      weekly via home-proxy-geoupdate.timer
+  Geoupdate:      weekly via home-proxy-geoupdate.timer${MTPROTO_LINE}
 
 Next steps:
   1. Open Telegram, send /start to @${BOT_USERNAME}.

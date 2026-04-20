@@ -66,6 +66,39 @@ func TestBuildSOCKSLinkEmpty(t *testing.T) {
 	}
 }
 
+func TestBuildMTProtoLink(t *testing.T) {
+	got := BuildMTProtoLink("www.google.com", 8443, "eedeadbeef")
+	want := "tg://proxy?server=www.google.com&port=8443&secret=eedeadbeef"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+
+	share := BuildMTProtoShareLink("www.google.com", 8443, "eedeadbeef")
+	if !strings.HasPrefix(share, "https://t.me/proxy?") {
+		t.Fatalf("unexpected share prefix: %q", share)
+	}
+	for _, want := range []string{"server=www.google.com", "port=8443", "secret=eedeadbeef"} {
+		if !strings.Contains(share, want) {
+			t.Errorf("share missing %q in %s", want, share)
+		}
+	}
+}
+
+func TestBuildMTProtoLinkEmpty(t *testing.T) {
+	if got := BuildMTProtoLink("", 1, "s"); got != "" {
+		t.Errorf("expected empty for empty host, got %q", got)
+	}
+	if got := BuildMTProtoLink("h", 1, ""); got != "" {
+		t.Errorf("expected empty for empty secret, got %q", got)
+	}
+	if got := BuildMTProtoShareLink("", 1, "s"); got != "" {
+		t.Errorf("share: expected empty for empty host, got %q", got)
+	}
+	if got := BuildMTProtoShareLink("h", 1, ""); got != "" {
+		t.Errorf("share: expected empty for empty secret, got %q", got)
+	}
+}
+
 func TestBuildQRPlaceholder(t *testing.T) {
 	got, err := BuildQR("vless://abc")
 	if err != nil {

@@ -57,6 +57,7 @@ These are delivered to **all admins except the actor**. The actor sees the actio
 | `user.enabled` | Manual enable | ✅ @{{actor}} enabled `{{name}}` |
 | `user.deleted` | Delete (confirmed) | 🗑️ @{{actor}} deleted `{{name}}` |
 | `reality.rotated` | Manual rotate | 🔑 @{{actor}} rotated Reality keypair |
+| `mtproto.rotated` | `⚙️ Server → ♻ Rotate MTProto secret` — rendered in `internal/bot/server.go` / `mtproto.go` | 🔑 @{{actor}} rotated the MTProto secret — reshare links. |
 | `daemon.started` | `serve` boot completed | ⚙️ Daemon started · home-proxy {{ver}} · xray-core {{xver}} |
 | `daemon.stopped` | Graceful shutdown | 🛑 Daemon stopped gracefully |
 

@@ -208,6 +208,8 @@ func (b *Bot) dispatchCallback(ctx context.Context, update *models.Update) error
 		return b.toggleUserProto(ctx, update, data[len(CBUserToggleV):], protoVLESS)
 	case strings.HasPrefix(data, CBUserToggleS):
 		return b.toggleUserProto(ctx, update, data[len(CBUserToggleS):], protoSOCKS)
+	case strings.HasPrefix(data, CBUserToggleMTProto):
+		return b.toggleUserMTProto(ctx, update, data[len(CBUserToggleMTProto):])
 	case strings.HasPrefix(data, CBUserEnable):
 		return b.setUserEnabled(ctx, update, data[len(CBUserEnable):], true)
 	case strings.HasPrefix(data, CBUserDisable):
@@ -229,6 +231,8 @@ func (b *Bot) dispatchCallback(ctx context.Context, update *models.Update) error
 		return b.addWizardToggleProto(ctx, update, protoVLESS)
 	case data == CBAddProtoSOCKS:
 		return b.addWizardToggleProto(ctx, update, protoSOCKS)
+	case data == CBAddProtoMTProto:
+		return b.addWizardToggleProto(ctx, update, protoMTProto)
 	case data == CBAddNext:
 		return b.addWizardNext(ctx, update)
 	case data == CBAddLimit10:
@@ -250,6 +254,8 @@ func (b *Bot) dispatchCallback(ctx context.Context, update *models.Update) error
 		return b.showServer(ctx, update)
 	case data == CBServerRotate:
 		return b.answerInfo(ctx, update, "err.generic")
+	case data == CBServerRotateMTProto:
+		return b.rotateMTProtoSecret(ctx, update)
 	case data == CBServerUpdateGeo:
 		return b.answerInfo(ctx, update, "err.generic")
 	case data == CBServerNotifications:
