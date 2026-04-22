@@ -262,15 +262,17 @@ func (b *Bot) dispatchCallback(ctx context.Context, update *models.Update) error
 	case data == CBServerMain:
 		return b.showServer(ctx, update)
 	case data == CBServerRotate:
-		return b.answerInfo(ctx, update, "err.generic")
+		return b.rotateReality(ctx, update)
 	case data == CBServerRotateMTProto:
 		return b.rotateMTProtoSecret(ctx, update)
 	case data == CBServerUpdateGeo:
-		return b.answerInfo(ctx, update, "err.generic")
+		return b.updateGeosite(ctx, update)
 	case data == CBServerNotifications:
 		return b.showNotifSettings(ctx, update)
 	case data == CBServerCheckUpdates:
 		return b.checkUpdates(ctx, update)
+	case data == CBServerSelfUpdate:
+		return b.selfUpdate(ctx, update)
 	case data == CBNotifToggleCritical:
 		return b.toggleNotifPref(ctx, update, "critical")
 	case data == CBNotifToggleImportant:

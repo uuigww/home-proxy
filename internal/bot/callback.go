@@ -46,6 +46,7 @@ const (
 	CBServerUpdateGeo     = "svg"
 	CBServerNotifications = "svn"
 	CBServerCheckUpdates  = "svc"
+	CBServerSelfUpdate    = "svu"
 
 	CBNotifToggleCritical  = "ntc"
 	CBNotifToggleImportant = "nti"

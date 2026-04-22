@@ -32,7 +32,10 @@ func (b *Bot) addWizardStart(ctx context.Context, update *models.Update) error {
 	}
 	sess.Screen = "wizard_add"
 
-	ws := WizardState{Kind: wizardKindAddUser, Step: 1, Data: map[string]any{}}
+	ws := WizardState{Kind: wizardKindAddUser, Step: 1, Data: map[string]any{
+		"vless": true,
+		"socks": true,
+	}}
 	if err := SaveWizard(&sess, ws); err != nil {
 		return err
 	}

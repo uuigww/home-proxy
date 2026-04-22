@@ -108,6 +108,10 @@ mtproto_secret = "    secret: %s"
 mtproto_rotate = "♻ Rotate MTProto secret"
 mtproto_rotated = "MTProto secret rotated — reshare links."
 mtproto_disabled = "🟡 MTProto not installed. Re-run install.sh with --mtproto."
+self_update = "⬆ Update home-proxy"
+rotate_reality_done = "✅ Reality keys rotated — reshare links."
+geo_updated = "✅ Geosite updated."
+self_update_restarting = "⬆ Updating to %s — bot will restart."
 
 [notif.settings]
 title = "🔔 Notifications"

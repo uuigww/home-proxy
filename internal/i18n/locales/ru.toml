@@ -109,6 +109,10 @@ mtproto_secret = "    secret: %s"
 mtproto_rotate = "♻ Обновить MTProto secret"
 mtproto_rotated = "MTProto secret обновлён — разошлите ссылки заново."
 mtproto_disabled = "🟡 MTProto не установлен. Перезапустите install.sh с флагом --mtproto."
+self_update = "⬆ Обновить home-proxy"
+rotate_reality_done = "✅ Ключи Reality обновлены — разошлите ссылки заново."
+geo_updated = "✅ geosite обновлён."
+self_update_restarting = "⬆ Обновляю до %s — бот перезапустится."
 
 [notif.settings]
 title = "🔔 Уведомления"
