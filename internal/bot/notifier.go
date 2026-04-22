@@ -251,12 +251,15 @@ func (n *Notifier) deliver(ctx context.Context, adminID int64, ev Event) error {
 		return nil
 	}
 
-	msg, err := n.send.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:      adminID,
-		Text:        text,
-		ParseMode:   models.ParseModeHTML,
-		ReplyMarkup: buttonsToMarkup(ev.Buttons),
-	})
+	sendParams := &bot.SendMessageParams{
+		ChatID:    adminID,
+		Text:      text,
+		ParseMode: models.ParseModeHTML,
+	}
+	if markup := buttonsToMarkup(ev.Buttons); markup != nil {
+		sendParams.ReplyMarkup = markup
+	}
+	msg, err := n.send.SendMessage(ctx, sendParams)
 	if err != nil {
 		return err
 	}
