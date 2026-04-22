@@ -21,6 +21,8 @@ type Config struct {
 	DataDir           string `toml:"data_dir"`
 	XrayAPI           string `toml:"xray_api"`
 	XrayConfig        string `toml:"xray_config"`
+	XrayVLESSTag      string `toml:"xray_vless_tag"`
+	XraySocksTag      string `toml:"xray_socks_tag"`
 	ServerHost        string `toml:"server_host"`
 	RealityDest       string `toml:"reality_dest"`
 	RealityServerName string `toml:"reality_server_name"`

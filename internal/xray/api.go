@@ -129,13 +129,9 @@ func (c *CLIClient) buildAddVLESSArgs(uuid, email string) []string {
 }
 
 // buildRemoveVLESSArgs returns the argv for `xray api rmu` removing a VLESS
-// account identified by email.
+// account identified by email. xray 26+ uses flag syntax: -tag=TAG email.
 func (c *CLIClient) buildRemoveVLESSArgs(email string) []string {
-	payload := map[string]any{
-		"tag":   c.vlessTag(),
-		"email": email,
-	}
-	return []string{"api", "rmu", "-s", c.APIAddr, mustJSON(payload)}
+	return []string{"api", "rmu", "-s", c.APIAddr, "-tag=" + c.vlessTag(), email}
 }
 
 // buildAddSOCKSArgs returns the argv for `xray api adu` adding a SOCKS5
@@ -156,12 +152,9 @@ func (c *CLIClient) buildAddSOCKSArgs(user, pass, email string) []string {
 }
 
 // buildRemoveSOCKSArgs returns the argv for removing a SOCKS5 account.
+// xray 26+ uses flag syntax: -tag=TAG email.
 func (c *CLIClient) buildRemoveSOCKSArgs(email string) []string {
-	payload := map[string]any{
-		"tag":   c.socksTag(),
-		"email": email,
-	}
-	return []string{"api", "rmu", "-s", c.APIAddr, mustJSON(payload)}
+	return []string{"api", "rmu", "-s", c.APIAddr, "-tag=" + c.socksTag(), email}
 }
 
 // buildStatsCmd returns the argv for `xray api statsquery` scoped to a single

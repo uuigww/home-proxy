@@ -68,6 +68,8 @@ func runServe(ctx context.Context, configPath string) error {
 	}
 
 	xc := xray.NewCLIClient("xray", cfg.XrayAPI)
+	xc.VLESSTag = cfg.XrayVLESSTag
+	xc.SOCKSTag = cfg.XraySocksTag
 
 	b, err := bot.New(ctx, cfg.BotToken, bot.Deps{
 		Store:       st,
