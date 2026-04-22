@@ -314,7 +314,7 @@ else
 fi
 
 # --------------------------------------------- step 5: home-proxy binary -----
-step "5/12  download home-proxy binary"
+step "5/12  install home-proxy binary"
 
 resolve_version() {
     if [[ -n "$VERSION" ]]; then
@@ -326,48 +326,56 @@ resolve_version() {
         | jq -r '.tag_name'
 }
 
-RELEASE_TAG="$(resolve_version)"
-if [[ -z "$RELEASE_TAG" || "$RELEASE_TAG" == "null" ]]; then
-    die "could not determine release tag (is there a published release?)"
-fi
-RELEASE_VER="${RELEASE_TAG#v}"
-info "release: ${RELEASE_TAG}"
-
-ARCHIVE_NAME="${REPO_NAME}_${RELEASE_VER}_linux_${ARCH}.tar.gz"
-DOWNLOAD_BASE="https://github.com/${REPO_SLUG}/releases/download/${RELEASE_TAG}"
-
-TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
-
-info "downloading ${ARCHIVE_NAME}"
-curl -fsSL -o "${TMP_DIR}/${ARCHIVE_NAME}" "${DOWNLOAD_BASE}/${ARCHIVE_NAME}"
-
-info "downloading checksums.txt"
-curl -fsSL -o "${TMP_DIR}/checksums.txt" "${DOWNLOAD_BASE}/checksums.txt"
-
-info "verifying SHA256 checksum"
-(
-    cd "$TMP_DIR"
-    expected=$(grep -E "[[:space:]]${ARCHIVE_NAME}\$" checksums.txt | awk '{print $1}' | head -n1)
-    if [[ -z "$expected" ]]; then
-        die "archive ${ARCHIVE_NAME} not listed in checksums.txt"
+# If the deploy wizard pre-uploaded the binary to /tmp, use it directly.
+if [[ -f /tmp/home-proxy && -x /tmp/home-proxy ]]; then
+    RELEASE_TAG="local"
+    install -o root -g root -m 0755 /tmp/home-proxy "${BIN_DIR}/home-proxy"
+    rm -f /tmp/home-proxy
+    ok "installed pre-uploaded binary → ${BIN_DIR}/home-proxy"
+else
+    RELEASE_TAG="$(resolve_version)"
+    if [[ -z "$RELEASE_TAG" || "$RELEASE_TAG" == "null" ]]; then
+        die "could not determine release tag (is there a published release?)"
     fi
-    actual=$(sha256sum "${ARCHIVE_NAME}" | awk '{print $1}')
-    if [[ "$expected" != "$actual" ]]; then
-        die "checksum mismatch: expected ${expected} got ${actual}"
+    RELEASE_VER="${RELEASE_TAG#v}"
+    info "release: ${RELEASE_TAG}"
+
+    ARCHIVE_NAME="${REPO_NAME}_${RELEASE_VER}_linux_${ARCH}.tar.gz"
+    DOWNLOAD_BASE="https://github.com/${REPO_SLUG}/releases/download/${RELEASE_TAG}"
+
+    TMP_DIR="$(mktemp -d)"
+    trap 'rm -rf "$TMP_DIR"' EXIT
+
+    info "downloading ${ARCHIVE_NAME}"
+    curl -fsSL -o "${TMP_DIR}/${ARCHIVE_NAME}" "${DOWNLOAD_BASE}/${ARCHIVE_NAME}"
+
+    info "downloading checksums.txt"
+    curl -fsSL -o "${TMP_DIR}/checksums.txt" "${DOWNLOAD_BASE}/checksums.txt"
+
+    info "verifying SHA256 checksum"
+    (
+        cd "$TMP_DIR"
+        expected=$(grep -E "[[:space:]]${ARCHIVE_NAME}\$" checksums.txt | awk '{print $1}' | head -n1)
+        if [[ -z "$expected" ]]; then
+            die "archive ${ARCHIVE_NAME} not listed in checksums.txt"
+        fi
+        actual=$(sha256sum "${ARCHIVE_NAME}" | awk '{print $1}')
+        if [[ "$expected" != "$actual" ]]; then
+            die "checksum mismatch: expected ${expected} got ${actual}"
+        fi
+    )
+    ok "checksum verified"
+
+    info "extracting archive"
+    tar -xzf "${TMP_DIR}/${ARCHIVE_NAME}" -C "$TMP_DIR"
+
+    if [[ ! -f "${TMP_DIR}/home-proxy" ]]; then
+        die "expected binary 'home-proxy' not found after extracting ${ARCHIVE_NAME}"
     fi
-)
-ok "checksum verified"
 
-info "extracting archive"
-tar -xzf "${TMP_DIR}/${ARCHIVE_NAME}" -C "$TMP_DIR"
-
-if [[ ! -f "${TMP_DIR}/home-proxy" ]]; then
-    die "expected binary 'home-proxy' not found after extracting ${ARCHIVE_NAME}"
+    install -o root -g root -m 0755 "${TMP_DIR}/home-proxy" "${BIN_DIR}/home-proxy"
+    ok "installed ${BIN_DIR}/home-proxy"
 fi
-
-install -o root -g root -m 0755 "${TMP_DIR}/home-proxy" "${BIN_DIR}/home-proxy"
-ok "installed ${BIN_DIR}/home-proxy"
 
 # --------------------------------------------- step 6: directories -----------
 step "6/12  create data / config / log directories"

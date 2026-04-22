@@ -258,10 +258,10 @@ func (w *Wizard) uploadBinary(_ context.Context, conn sshConn, p *Progress) erro
 			continue
 		}
 		p.Info(fmt.Sprintf("uploading %s (%.1f MB)…", cand, float64(info.Size())/1024/1024))
-		if err := conn.Upload(cand, "/usr/local/bin/home-proxy", 0o755); err != nil {
+		if err := conn.Upload(cand, "/tmp/home-proxy", 0o755); err != nil {
 			return err
 		}
-		p.OK(fmt.Sprintf("uploaded %s", cand))
+		p.OK(fmt.Sprintf("uploaded %s → /tmp/home-proxy", cand))
 		return nil
 	}
 	p.Info("no local Linux binary found — install.sh will download a release")
