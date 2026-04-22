@@ -1,6 +1,8 @@
 package bot
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -57,12 +59,17 @@ func (b *Bot) checkUpdates(ctx context.Context, update *models.Update) error {
 
 	latest := strings.TrimPrefix(release.TagName, "v")
 	current := strings.TrimPrefix(version.Version, "v")
+	// git-describe adds "-N-gHASH" suffix; strip to get the base semver tag.
+	currentBase := current
+	if idx := strings.IndexByte(current, '-'); idx >= 0 {
+		currentBase = current[:idx]
+	}
 
 	var updateLine string
-	if current == "dev" || latest == current {
+	if current == "dev" || !semverGT(latest, currentBase) {
 		updateLine = b.deps.I18n.T(lang, "server.update_ok", version.Version)
 	} else {
-		updateLine = b.deps.I18n.T(lang, "server.update_available", version.Version, release.TagName)
+		updateLine = b.deps.I18n.T(lang, "server.update_available", release.TagName, version.Version)
 	}
 	return b.renderServer(ctx, update, updateLine)
 }
@@ -229,7 +236,9 @@ func (b *Bot) applyXrayConfig(ctx context.Context, reality xray.Reality) error {
 	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
 		return fmt.Errorf("write xray config: %w", err)
 	}
-	if out, err := exec.CommandContext(ctx, "systemctl", "restart", "xray").CombinedOutput(); err != nil {
+	restartCtx, restartCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer restartCancel()
+	if out, err := exec.CommandContext(restartCtx, "systemctl", "restart", "xray").CombinedOutput(); err != nil {
 		return fmt.Errorf("restart xray: %w (output: %s)", err, strings.TrimSpace(string(out)))
 	}
 	return nil
@@ -291,58 +300,63 @@ func (b *Bot) selfUpdate(ctx context.Context, update *models.Update) error {
 		return fmt.Errorf("decode release: %w", err)
 	}
 
-	// Find the linux binary asset for the current GOARCH.
-	arch := runtime.GOARCH
-	if arch == "amd64" {
-		arch = "x86_64"
-	}
-	wantSuffix := fmt.Sprintf("linux_%s", arch)
+	// Find the linux/GOARCH tar.gz asset — goreleaser names them
+	// home-proxy_VERSION_linux_amd64.tar.gz (uses Go arch names, not uname).
+	wantInfix := fmt.Sprintf("linux_%s", runtime.GOARCH)
 	var downloadURL string
 	for _, a := range release.Assets {
-		if strings.Contains(a.Name, wantSuffix) && strings.HasSuffix(a.Name, ".tar.gz") {
-			downloadURL = a.BrowserDownloadURL
-			break
-		}
-		// also match plain binary names
-		if strings.Contains(a.Name, "linux") && strings.Contains(a.Name, arch) {
+		if strings.Contains(a.Name, wantInfix) && strings.HasSuffix(a.Name, ".tar.gz") {
 			downloadURL = a.BrowserDownloadURL
 			break
 		}
 	}
 	if downloadURL == "" {
-		return fmt.Errorf("no linux/%s asset in release %s", runtime.GOARCH, release.TagName)
+		return fmt.Errorf("no %s asset in release %s", wantInfix, release.TagName)
 	}
 
-	// Download to temp file.
-	tmp, err := os.CreateTemp("", "home-proxy-update-*")
+	// Download tar.gz to temp file, then extract the binary.
+	tarTmp, err := os.CreateTemp("", "home-proxy-update-*.tar.gz")
 	if err != nil {
 		return fmt.Errorf("create temp: %w", err)
 	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	tarPath := tarTmp.Name()
+	defer os.Remove(tarPath)
 
 	dlReq, _ := http.NewRequestWithContext(dlCtx, http.MethodGet, downloadURL, nil)
 	dlResp, err := http.DefaultClient.Do(dlReq)
 	if err != nil {
-		tmp.Close()
-		return fmt.Errorf("download binary: %w", err)
+		tarTmp.Close()
+		return fmt.Errorf("download: %w", err)
 	}
 	defer dlResp.Body.Close()
-	if _, err := io.Copy(tmp, dlResp.Body); err != nil {
-		tmp.Close()
-		return fmt.Errorf("write binary: %w", err)
+	if _, err := io.Copy(tarTmp, dlResp.Body); err != nil {
+		tarTmp.Close()
+		return fmt.Errorf("write tar: %w", err)
 	}
-	tmp.Close()
+	tarTmp.Close()
 
-	if err := os.Chmod(tmpPath, 0755); err != nil {
+	// Extract binary from the archive.
+	binTmp, err := os.CreateTemp("", "home-proxy-update-bin-*")
+	if err != nil {
+		return fmt.Errorf("create bin temp: %w", err)
+	}
+	binTmpPath := binTmp.Name()
+	defer os.Remove(binTmpPath)
+	if err := extractBinaryFromTarGz(tarPath, "home-proxy", binTmp); err != nil {
+		binTmp.Close()
+		return fmt.Errorf("extract binary: %w", err)
+	}
+	binTmp.Close()
+
+	if err := os.Chmod(binTmpPath, 0755); err != nil {
 		return fmt.Errorf("chmod: %w", err)
 	}
 
-	// Rename over the current binary atomically.
+	// Atomic replace: copy to .new then rename over the live binary.
 	binPath := "/usr/local/bin/home-proxy"
 	newPath := binPath + ".new"
-	if err := os.Rename(tmpPath, newPath); err != nil {
-		return fmt.Errorf("rename: %w", err)
+	if err := os.Rename(binTmpPath, newPath); err != nil {
+		return fmt.Errorf("stage: %w", err)
 	}
 	if err := os.Rename(newPath, binPath); err != nil {
 		return fmt.Errorf("install: %w", err)
@@ -381,6 +395,63 @@ func downloadFile(ctx context.Context, url, dest string) error {
 	}
 	tmp.Close()
 	return os.Rename(tmpPath, dest)
+}
+
+// extractBinaryFromTarGz opens a .tar.gz file and copies the first entry whose
+// base name matches binaryName into dst.
+func extractBinaryFromTarGz(tarGzPath, binaryName string, dst *os.File) error {
+	f, err := os.Open(tarGzPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		return err
+	}
+	defer gr.Close()
+	tr := tar.NewReader(gr)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		name := hdr.Name
+		if idx := strings.LastIndexByte(name, '/'); idx >= 0 {
+			name = name[idx+1:]
+		}
+		if name == binaryName {
+			_, err = io.Copy(dst, tr)
+			return err
+		}
+	}
+	return fmt.Errorf("%q not found in archive", binaryName)
+}
+
+// semverGT returns true when a is strictly greater than b. Both must be bare
+// "X.Y.Z" strings (no "v" prefix, no pre-release suffix).
+func semverGT(a, b string) bool {
+	parse := func(s string) [3]int {
+		var x [3]int
+		parts := strings.SplitN(s, ".", 3)
+		for i, p := range parts {
+			if i >= 3 {
+				break
+			}
+			fmt.Sscanf(p, "%d", &x[i])
+		}
+		return x
+	}
+	av, bv := parse(a), parse(b)
+	for i := range av {
+		if av[i] != bv[i] {
+			return av[i] > bv[i]
+		}
+	}
+	return false
 }
 
 // appendMTProtoStatus renders a compact MTProto info block on the server

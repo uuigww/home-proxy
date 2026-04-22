@@ -154,7 +154,7 @@ type wireguardPeer struct {
 
 // buildOutbounds renders the ordered outbound list: direct first (default),
 // warp for Google traffic, and blackhole for the block rule.
-func buildOutbounds(w WarpPeer) ([]Outbound, error) {
+func buildOutbounds(w WarpPeer, hasWarp bool) ([]Outbound, error) {
 	directSettings, err := json.Marshal(map[string]any{
 		"domainStrategy": "UseIP",
 	})
@@ -169,40 +169,43 @@ func buildOutbounds(w WarpPeer) ([]Outbound, error) {
 		return nil, err
 	}
 
-	addresses := []string{}
-	if strings.TrimSpace(w.IPv4) != "" {
-		addresses = append(addresses, w.IPv4)
-	}
-	if strings.TrimSpace(w.IPv6) != "" {
-		addresses = append(addresses, w.IPv6)
-	}
-
-	warpPayload := map[string]any{
-		"secretKey": w.PrivateKey,
-		"address":   addresses,
-		"peers": []wireguardPeer{
-			{
-				PublicKey:  w.PeerPublicKey,
-				Endpoint:   w.Endpoint,
-				AllowedIPs: []string{"0.0.0.0/0", "::/0"},
-				KeepAlive:  25,
-			},
-		},
-		"mtu": warpMTU(w.MTU),
-	}
-	if len(w.Reserved) > 0 {
-		warpPayload["reserved"] = w.Reserved
-	}
-	warpSettings, err := json.Marshal(warpPayload)
-	if err != nil {
-		return nil, err
-	}
-
-	return []Outbound{
+	out := []Outbound{
 		{Tag: TagDirect, Protocol: "freedom", Settings: directSettings},
-		{Tag: TagWarp, Protocol: "wireguard", Settings: warpSettings},
-		{Tag: TagBlock, Protocol: "blackhole", Settings: blockSettings},
-	}, nil
+	}
+
+	if hasWarp {
+		addresses := []string{}
+		if strings.TrimSpace(w.IPv4) != "" {
+			addresses = append(addresses, w.IPv4)
+		}
+		if strings.TrimSpace(w.IPv6) != "" {
+			addresses = append(addresses, w.IPv6)
+		}
+		warpPayload := map[string]any{
+			"secretKey": w.PrivateKey,
+			"address":   addresses,
+			"peers": []wireguardPeer{
+				{
+					PublicKey:  w.PeerPublicKey,
+					Endpoint:   w.Endpoint,
+					AllowedIPs: []string{"0.0.0.0/0", "::/0"},
+					KeepAlive:  25,
+				},
+			},
+			"mtu": warpMTU(w.MTU),
+		}
+		if len(w.Reserved) > 0 {
+			warpPayload["reserved"] = w.Reserved
+		}
+		warpSettings, err := json.Marshal(warpPayload)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Outbound{Tag: TagWarp, Protocol: "wireguard", Settings: warpSettings})
+	}
+
+	out = append(out, Outbound{Tag: TagBlock, Protocol: "blackhole", Settings: blockSettings})
+	return out, nil
 }
 
 // warpMTU returns 1280 if mtu is unset; Cloudflare's wgcf default.
@@ -215,24 +218,26 @@ func warpMTU(mtu int) int {
 
 // buildRouting returns the routing block: api traffic first, Google/AI domains
 // to warp, everything else falls through to direct via the last rule.
-func buildRouting() Routing {
+func buildRouting(hasWarp bool) Routing {
 	rules := []RoutingRule{
 		{
 			Type:        "field",
 			InboundTag:  []string{TagAPIIn},
 			OutboundTag: TagAPI,
 		},
-		{
+	}
+	if hasWarp {
+		rules = append(rules, RoutingRule{
 			Type:        "field",
 			Domain:      append([]string(nil), warpRouteDomains...),
 			OutboundTag: TagWarp,
-		},
-		{
-			Type:        "field",
-			Network:     "tcp,udp",
-			OutboundTag: TagDirect,
-		},
+		})
 	}
+	rules = append(rules, RoutingRule{
+		Type:        "field",
+		Network:     "tcp,udp",
+		OutboundTag: TagDirect,
+	})
 	return Routing{
 		DomainStrategy: "IPIfNonMatch",
 		Rules:          rules,

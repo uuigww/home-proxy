@@ -179,7 +179,6 @@ const (
 // Google refuses to captcha our VPS IP. Keep alphabetised, geosite first.
 var warpRouteDomains = []string{
 	"geosite:google",
-	"geosite:google-ads",
 	"geosite:google-play",
 	"geosite:google-scholar",
 	"geosite:youtube",
@@ -230,7 +229,8 @@ func Generate(in GenInput) (Config, error) {
 	}
 	inbounds = append(inbounds, socksIn)
 
-	outbounds, err := buildOutbounds(in.Warp)
+	hasWarp := strings.TrimSpace(in.Warp.PrivateKey) != ""
+	outbounds, err := buildOutbounds(in.Warp, hasWarp)
 	if err != nil {
 		return Config{}, err
 	}
@@ -240,7 +240,7 @@ func Generate(in GenInput) (Config, error) {
 		API:       APIConfig{Tag: TagAPI, Services: []string{"HandlerService", "StatsService"}},
 		Inbounds:  inbounds,
 		Outbounds: outbounds,
-		Routing:   buildRouting(),
+		Routing:   buildRouting(hasWarp),
 		Stats:     StatsConfig{},
 		Policy: Policy{
 			Levels: map[string]PolicyLevel{
