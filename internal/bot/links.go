@@ -106,9 +106,9 @@ func (b *Bot) showUserLinks(ctx context.Context, update *models.Update, payload 
 		return err
 	}
 	r, _ := b.deps.Store.GetRealityKeys(ctx)
-	host := b.deps.Cfg.RealityServerName
+	host := b.deps.Cfg.ServerHost
 	if host == "" {
-		host = "example.com"
+		host = b.deps.Cfg.RealityServerName
 	}
 	vl := BuildVLESSLink(u, r, host, b.deps.Cfg.RealityPort)
 	sl := BuildSOCKSLink(u, host, b.deps.Cfg.SOCKSPort)
