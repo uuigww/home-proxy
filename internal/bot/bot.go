@@ -165,9 +165,12 @@ func (b *Bot) defaultHandler(ctx context.Context, tg *bot.Bot, update *models.Up
 		return
 	}
 	if update.CallbackQuery != nil {
-		if err := b.dispatchCallback(ctx, update); err != nil {
+		err := b.dispatchCallback(ctx, update)
+		if err != nil {
 			b.deps.Log.Error("bot: callback failed", "err", err, "data", update.CallbackQuery.Data)
 			b.answerCallback(ctx, update.CallbackQuery.ID, b.tr(ctx, update, "err.generic"))
+		} else {
+			b.answerCallback(ctx, update.CallbackQuery.ID, "")
 		}
 		return
 	}
@@ -187,12 +190,16 @@ func (b *Bot) handleStart(ctx context.Context, tg *bot.Bot, update *models.Updat
 }
 
 // dispatchCallback routes inline-callback events to per-screen handlers.
+//
+// IMPORTANT: do not call answerCallback here — defaultHandler is responsible
+// for answering so that errors are always surfaced to the user as a toast.
+// Longer/more-specific HasPrefix cases must come before shorter ones that
+// share a common prefix (e.g. "ull:" before "ul:", "udl:" before "ud:").
 func (b *Bot) dispatchCallback(ctx context.Context, update *models.Update) error {
 	cq := update.CallbackQuery
 	if cq == nil {
 		return nil
 	}
-	defer b.answerCallback(ctx, cq.ID, "")
 	data := cq.Data
 
 	switch {
@@ -200,6 +207,9 @@ func (b *Bot) dispatchCallback(ctx context.Context, update *models.Update) error
 		return b.showMainMenu(ctx, update, false)
 	case data == CBHelp:
 		return b.showHelp(ctx, update)
+	// "ull:" must come before "ul:" — both share the "ul" prefix.
+	case strings.HasPrefix(data, CBUserLinks):
+		return b.showUserLinks(ctx, update, data[len(CBUserLinks):])
 	case strings.HasPrefix(data, CBUsersList):
 		return b.showUsersList(ctx, update, data[len(CBUsersList):])
 	case strings.HasPrefix(data, CBUserCard):
@@ -212,18 +222,17 @@ func (b *Bot) dispatchCallback(ctx context.Context, update *models.Update) error
 		return b.toggleUserMTProto(ctx, update, data[len(CBUserToggleMTProto):])
 	case strings.HasPrefix(data, CBUserEnable):
 		return b.setUserEnabled(ctx, update, data[len(CBUserEnable):], true)
-	case strings.HasPrefix(data, CBUserDisable):
-		return b.setUserEnabled(ctx, update, data[len(CBUserDisable):], false)
-	case strings.HasPrefix(data, CBUserLinks):
-		return b.showUserLinks(ctx, update, data[len(CBUserLinks):])
-	case strings.HasPrefix(data, CBUserQR):
-		return b.showUserQR(ctx, update, data[len(CBUserQR):])
+	// "udl:", "udy:", "udn:" must come before "ud:" — all share the "ud" prefix.
 	case strings.HasPrefix(data, CBUserDelete):
 		return b.confirmDeleteUser(ctx, update, data[len(CBUserDelete):])
 	case strings.HasPrefix(data, CBUserDelYes):
 		return b.deleteUser(ctx, update, data[len(CBUserDelYes):])
 	case strings.HasPrefix(data, CBUserDelNo):
 		return b.showUserCard(ctx, update, data[len(CBUserDelNo):])
+	case strings.HasPrefix(data, CBUserDisable):
+		return b.setUserEnabled(ctx, update, data[len(CBUserDisable):], false)
+	case strings.HasPrefix(data, CBUserQR):
+		return b.showUserQR(ctx, update, data[len(CBUserQR):])
 
 	case data == CBAddStart:
 		return b.addWizardStart(ctx, update)
@@ -260,6 +269,8 @@ func (b *Bot) dispatchCallback(ctx context.Context, update *models.Update) error
 		return b.answerInfo(ctx, update, "err.generic")
 	case data == CBServerNotifications:
 		return b.showNotifSettings(ctx, update)
+	case data == CBServerCheckUpdates:
+		return b.checkUpdates(ctx, update)
 	case data == CBNotifToggleCritical:
 		return b.toggleNotifPref(ctx, update, "critical")
 	case data == CBNotifToggleImportant:

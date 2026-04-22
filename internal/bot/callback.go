@@ -45,6 +45,7 @@ const (
 	CBServerRotateMTProto = "svm"
 	CBServerUpdateGeo     = "svg"
 	CBServerNotifications = "svn"
+	CBServerCheckUpdates  = "svc"
 
 	CBNotifToggleCritical  = "ntc"
 	CBNotifToggleImportant = "nti"

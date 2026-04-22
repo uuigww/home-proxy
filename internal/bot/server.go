@@ -2,8 +2,10 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os/exec"
 	"strings"
 	"time"
@@ -11,10 +13,59 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/uuigww/home-proxy/internal/store"
+	"github.com/uuigww/home-proxy/internal/version"
 )
 
 // showServer renders the ⚙️ Server status + actions screen.
 func (b *Bot) showServer(ctx context.Context, update *models.Update) error {
+	return b.renderServer(ctx, update, "")
+}
+
+// checkUpdates fetches the latest release tag from GitHub and re-renders the
+// server screen with an update-status line appended.
+func (b *Bot) checkUpdates(ctx context.Context, update *models.Update) error {
+	lang := b.adminLang(ctx, updateTGID(update))
+
+	reqCtx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet,
+		"https://api.github.com/repos/uuigww/home-proxy/releases/latest", nil)
+	if err != nil {
+		return fmt.Errorf("update check: %w", err)
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "home-proxy-bot")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("update check: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var release struct {
+		TagName string `json:"tag_name"`
+		HTMLURL string `json:"html_url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return fmt.Errorf("update check decode: %w", err)
+	}
+
+	latest := strings.TrimPrefix(release.TagName, "v")
+	current := strings.TrimPrefix(version.Version, "v")
+
+	var updateLine string
+	if current == "dev" || latest == current {
+		updateLine = b.deps.I18n.T(lang, "server.update_ok", version.Version)
+	} else {
+		updateLine = b.deps.I18n.T(lang, "server.update_available", version.Version, release.TagName)
+	}
+	return b.renderServer(ctx, update, updateLine)
+}
+
+// renderServer renders the server screen. updateLine is an optional extra line
+// shown below the status block (used by checkUpdates to show update info).
+func (b *Bot) renderServer(ctx context.Context, update *models.Update, updateLine string) error {
 	tgID := updateTGID(update)
 	sess, err := b.sessions.Get(ctx, tgID)
 	if err != nil {
@@ -52,6 +103,8 @@ func (b *Bot) showServer(ctx context.Context, update *models.Update) error {
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "<b>%s</b>\n", b.deps.I18n.T(lang, "server.title"))
+	sb.WriteString(b.deps.I18n.T(lang, "server.version", version.Version))
+	sb.WriteString("\n")
 	sb.WriteString(b.deps.I18n.T(lang, "server.xray_status", xrayLbl))
 	sb.WriteString("\n")
 	sb.WriteString(b.deps.I18n.T(lang, "server.reality_keys", realityLbl))
@@ -59,6 +112,10 @@ func (b *Bot) showServer(ctx context.Context, update *models.Update) error {
 	sb.WriteString(b.deps.I18n.T(lang, "server.warp_status", warpLbl))
 	sb.WriteString("\n")
 	b.appendMTProtoStatus(ctx, &sb, lang)
+	if updateLine != "" {
+		sb.WriteString(updateLine)
+		sb.WriteString("\n")
+	}
 
 	rows := [][]models.InlineKeyboardButton{
 		kbRow(btn(b.deps.I18n.T(lang, "server.rotate_reality"), CBServerRotate)),
@@ -68,6 +125,7 @@ func (b *Bot) showServer(ctx context.Context, update *models.Update) error {
 	}
 	rows = append(rows,
 		kbRow(btn(b.deps.I18n.T(lang, "server.update_geo"), CBServerUpdateGeo)),
+		kbRow(btn(b.deps.I18n.T(lang, "server.check_updates"), CBServerCheckUpdates)),
 		kbRow(btn(b.deps.I18n.T(lang, "server.notifications"), CBServerNotifications)),
 		backRow(b.deps.I18n.T(lang, "menu.back")),
 	)
