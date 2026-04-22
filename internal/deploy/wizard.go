@@ -241,9 +241,9 @@ func (w *Wizard) Run(ctx context.Context) error {
 	return nil
 }
 
-// uploadBinary probes localBinCandidates and uploads the first existing match.
-// When none exist, a warning is printed but the pipeline continues so dev-time
-// runs remain usable.
+// uploadBinary probes localBinCandidates and uploads the first existing Linux
+// ELF match. When none exist (or only non-Linux binaries are found), a warning
+// is printed but the pipeline continues — install.sh will fetch a release.
 func (w *Wizard) uploadBinary(_ context.Context, conn sshConn, p *Progress) error {
 	for _, cand := range w.localBinCandidates {
 		info, err := os.Stat(cand)
@@ -253,15 +253,34 @@ func (w *Wizard) uploadBinary(_ context.Context, conn sshConn, p *Progress) erro
 		if info.IsDir() {
 			continue
 		}
+		if !isLinuxELF(cand) {
+			p.Info(fmt.Sprintf("skipping %s: not a Linux ELF binary", cand))
+			continue
+		}
+		p.Info(fmt.Sprintf("uploading %s (%.1f MB)…", cand, float64(info.Size())/1024/1024))
 		if err := conn.Upload(cand, "/usr/local/bin/home-proxy", 0o755); err != nil {
 			return err
 		}
 		p.OK(fmt.Sprintf("uploaded %s", cand))
 		return nil
 	}
-	p.Info("no local ./home-proxy or ./bin/home-proxy — install.sh --version will fetch a release")
+	p.Info("no local Linux binary found — install.sh will download a release")
 	p.OK("skipped (server-side install will download)")
 	return nil
+}
+
+// isLinuxELF reports whether the file at path begins with the ELF magic bytes.
+func isLinuxELF(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	var magic [4]byte
+	if _, err := io.ReadFull(f, magic[:]); err != nil {
+		return false
+	}
+	return magic[0] == 0x7f && magic[1] == 'E' && magic[2] == 'L' && magic[3] == 'F'
 }
 
 // detectOSArch runs `uname -sm` on the server and returns a trimmed label.
