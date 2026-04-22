@@ -28,10 +28,13 @@ case "$(uname -m)" in
 esac
 
 # ---- find latest tag ------------------------------------------------------
-TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-      | awk -F'"' '/"tag_name"/{print $4; exit}')
+# Use -sL (not -f) so HTTP errors pass through to awk instead of killing
+# the pipeline; || true guards against set -e on transient curl failures.
+TAG=$(curl -sSL "https://api.github.com/repos/${REPO}/releases/latest" \
+      | awk -F'"' '/"tag_name"/{print $4; exit}') || true
 if [[ -z "${TAG:-}" ]]; then
-    printf 'could not determine latest release tag from github api\n' >&2
+    printf 'error: could not determine latest release tag.\n' >&2
+    printf 'Check https://github.com/%s/releases or set TAG manually.\n' "$REPO" >&2
     exit 1
 fi
 VER="${TAG#v}"
@@ -40,7 +43,10 @@ ARCHIVE="home-proxy_${VER}_${OS}_${ARCH}.tar.gz"
 URL="https://github.com/${REPO}/releases/download/${TAG}/${ARCHIVE}"
 
 printf '→ downloading %s\n' "$ARCHIVE"
-curl -fL -o "$ARCHIVE" "$URL"
+if ! curl -fL -o "$ARCHIVE" "$URL"; then
+    printf 'error: download failed: %s\n' "$URL" >&2
+    exit 1
+fi
 
 printf '→ extracting\n'
 tar -xzf "$ARCHIVE"
