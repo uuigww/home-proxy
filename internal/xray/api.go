@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -277,10 +278,32 @@ func (c *CLIClient) Ping(ctx context.Context) error {
 }
 
 // run invokes the xray binary with the supplied argv and returns stdout.
+//
+// When the last element of argv is a JSON object (starts with '{'), it is
+// written to a temp file and the file path replaces the inline JSON — xray api
+// adu/rmu expect file paths, not inline JSON strings.
+//
 // Stderr is consulted to translate "user not found" errors into a typed
 // ErrUserNotFound; anything else becomes a wrapped error with stderr
 // preserved for diagnosis.
 func (c *CLIClient) run(ctx context.Context, argv []string) ([]byte, error) {
+	// Materialise any trailing JSON payload as a temp file.
+	if len(argv) > 0 && strings.HasPrefix(argv[len(argv)-1], "{") {
+		jsonData := argv[len(argv)-1]
+		tmp, err := os.CreateTemp("", "xray-api-*.json")
+		if err != nil {
+			return nil, fmt.Errorf("xray: create temp: %w", err)
+		}
+		tmpPath := tmp.Name()
+		defer os.Remove(tmpPath)
+		if _, err := tmp.WriteString(jsonData); err != nil {
+			tmp.Close()
+			return nil, fmt.Errorf("xray: write temp: %w", err)
+		}
+		tmp.Close()
+		argv = append(append([]string(nil), argv[:len(argv)-1]...), tmpPath)
+	}
+
 	cmd := exec.CommandContext(ctx, c.XrayBin, argv...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
