@@ -21,9 +21,6 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: go mod tidy
-        run: go mod tidy
-
       - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
