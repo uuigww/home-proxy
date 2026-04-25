@@ -75,76 +75,53 @@ func TestBuildAddVLESSArgs(t *testing.T) {
 		t.Errorf("unexpected arg prefix: %v", got[:4])
 	}
 	m := mustUnmarshal(t, got[4])
-	if m["tag"] != VLESSInboundTag {
-		t.Errorf("expected tag=%q, got %v", VLESSInboundTag, m["tag"])
+	inbounds, ok := m["inbounds"].([]any)
+	if !ok || len(inbounds) != 1 {
+		t.Fatalf("expected one inbound entry, got %v", m["inbounds"])
 	}
-	users, ok := m["users"].([]any)
-	if !ok || len(users) != 1 {
-		t.Fatalf("expected one user entry, got %v", m["users"])
+	ib := inbounds[0].(map[string]any)
+	if ib["tag"] != VLESSInboundTag {
+		t.Errorf("expected tag=%q, got %v", VLESSInboundTag, ib["tag"])
 	}
-	user := users[0].(map[string]any)
-	if user["email"] != "alice" {
-		t.Errorf("expected email alice, got %v", user["email"])
+	if ib["protocol"] != "vless" {
+		t.Errorf("expected protocol=vless, got %v", ib["protocol"])
 	}
-	acct := user["account"].(map[string]any)
-	if acct["type"] != "xray.proxy.vless.Account" {
-		t.Errorf("unexpected account type: %v", acct["type"])
+	settings := ib["settings"].(map[string]any)
+	clients, ok := settings["clients"].([]any)
+	if !ok || len(clients) != 1 {
+		t.Fatalf("expected one client, got %v", settings["clients"])
 	}
-	if acct["id"] != "abc-uuid" {
-		t.Errorf("expected id=abc-uuid, got %v", acct["id"])
+	client := clients[0].(map[string]any)
+	if client["email"] != "alice" {
+		t.Errorf("expected email alice, got %v", client["email"])
 	}
-	if acct["flow"] != "xtls-rprx-vision" {
-		t.Errorf("expected flow xtls-rprx-vision, got %v", acct["flow"])
+	if client["id"] != "abc-uuid" {
+		t.Errorf("expected id=abc-uuid, got %v", client["id"])
+	}
+	if client["flow"] != "xtls-rprx-vision" {
+		t.Errorf("expected flow xtls-rprx-vision, got %v", client["flow"])
 	}
 }
 
 func TestBuildRemoveVLESSArgs(t *testing.T) {
 	got := newTestClient().buildRemoveVLESSArgs("alice")
-	if got[0] != "api" || got[1] != "rmu" {
-		t.Errorf("expected rmu command, got %v", got[:2])
-	}
-	m := mustUnmarshal(t, got[4])
-	if m["email"] != "alice" || m["tag"] != VLESSInboundTag {
-		t.Errorf("unexpected payload: %v", m)
+	want := []string{"api", "rmu", "-s", "127.0.0.1:10085", "-tag=" + VLESSInboundTag, "alice"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("buildRemoveVLESSArgs mismatch:\n got:  %v\n want: %v", got, want)
 	}
 }
 
-func TestBuildAddSOCKSArgs(t *testing.T) {
-	got := newTestClient().buildAddSOCKSArgs("alice", "s3cr3t", "alice-email")
-	if got[1] != "adu" {
-		t.Errorf("expected adu, got %v", got[1])
-	}
-	m := mustUnmarshal(t, got[4])
-	if m["tag"] != SOCKSInboundTag {
-		t.Errorf("expected socks tag, got %v", m["tag"])
-	}
-	user := m["users"].([]any)[0].(map[string]any)
-	acct := user["account"].(map[string]any)
-	if acct["type"] != "xray.proxy.socks.Account" {
-		t.Errorf("unexpected account type: %v", acct["type"])
-	}
-	if acct["username"] != "alice" || acct["password"] != "s3cr3t" {
-		t.Errorf("unexpected credentials: %v", acct)
-	}
-}
-
-func TestBuildRemoveSOCKSArgs(t *testing.T) {
-	got := newTestClient().buildRemoveSOCKSArgs("alice-email")
-	m := mustUnmarshal(t, got[4])
-	if m["tag"] != SOCKSInboundTag || m["email"] != "alice-email" {
-		t.Errorf("unexpected payload: %v", m)
-	}
-}
-
-func TestCustomTagsHonoured(t *testing.T) {
+func TestCustomVLESSTagHonoured(t *testing.T) {
 	c := &CLIClient{XrayBin: "xray", APIAddr: "127.0.0.1:10085", VLESSTag: "my-v", SOCKSTag: "my-s"}
 	v := c.buildAddVLESSArgs("u", "e")
-	if m := mustUnmarshal(t, v[4]); m["tag"] != "my-v" {
-		t.Errorf("expected tag=my-v, got %v", m["tag"])
+	m := mustUnmarshal(t, v[4])
+	ib := m["inbounds"].([]any)[0].(map[string]any)
+	if ib["tag"] != "my-v" {
+		t.Errorf("expected tag=my-v, got %v", ib["tag"])
 	}
-	s := c.buildAddSOCKSArgs("u", "p", "e")
-	if m := mustUnmarshal(t, s[4]); m["tag"] != "my-s" {
-		t.Errorf("expected tag=my-s, got %v", m["tag"])
+	rm := c.buildRemoveVLESSArgs("e")
+	if rm[4] != "-tag=my-v" {
+		t.Errorf("expected -tag=my-v, got %v", rm[4])
 	}
 }
 

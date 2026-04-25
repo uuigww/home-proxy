@@ -61,10 +61,12 @@ type Client interface {
 	Ping(ctx context.Context) error
 }
 
-// Default Xray inbound tags home-proxy emits.
+// Default Xray inbound tags home-proxy emits. Aliased to the canonical
+// TagVLESSIn / TagSOCKSIn constants in config.go so a single source of truth
+// is used both when generating config.json and when calling the runtime API.
 const (
-	VLESSInboundTag = "vless-reality"
-	SOCKSInboundTag = "socks-in"
+	VLESSInboundTag = TagVLESSIn
+	SOCKSInboundTag = TagSOCKSIn
 )
 
 // CLIClient implements Client by shelling out to the `xray api` subcommand.
@@ -72,11 +74,25 @@ const (
 // XrayBin is the absolute path (or bare name in $PATH) of the xray binary;
 // APIAddr is the host:port of the Xray API gRPC listener (e.g. 127.0.0.1:10085).
 // VLESSTag and SOCKSTag default to the constants above when empty.
+//
+// SOCKS user management (Add/Remove) cannot use the runtime gRPC API because
+// xray-core's SOCKS proxy does not implement UserManager — calls return
+// "proxy is not a UserManager". Instead, AddSOCKSUser/RemoveSOCKSUser patch
+// the on-disk config.json and restart xray. ConfigPath and RestartXray must
+// both be set for those operations to work.
 type CLIClient struct {
 	XrayBin  string
 	APIAddr  string
 	VLESSTag string
 	SOCKSTag string
+
+	// ConfigPath is the absolute path to xray's config.json. Required for
+	// SOCKS user management.
+	ConfigPath string
+
+	// RestartXray restarts the xray process so a freshly-written config.json
+	// takes effect. Required for SOCKS user management.
+	RestartXray func(ctx context.Context) error
 }
 
 // NewCLIClient returns a CLIClient with sensible defaults. Either argument
@@ -110,18 +126,25 @@ func (c *CLIClient) socksTag() string {
 // ---------------------------------------------------------------------------
 
 // buildAddVLESSArgs returns the argv for `xray api adu` adding a VLESS
-// account to the configured inbound. The last argument is the JSON payload
-// describing the account.
+// account to the configured inbound. xray 26 parses the payload as a
+// full conf.Config fragment, so the inbound has to be wrapped in an
+// "inbounds" array with a tag that matches a live runtime handler.
+// The "port" field is required by the config validator but unused at
+// runtime — adu locates the inbound by tag.
 func (c *CLIClient) buildAddVLESSArgs(uuid, email string) []string {
 	payload := map[string]any{
-		"tag": c.vlessTag(),
-		"users": []map[string]any{{
-			"email": email,
-			"account": map[string]any{
-				"type":  "xray.proxy.vless.Account",
-				"id":    uuid,
-				"flow":  "xtls-rprx-vision",
-				"level": 0,
+		"inbounds": []map[string]any{{
+			"tag":      c.vlessTag(),
+			"port":     1,
+			"protocol": "vless",
+			"settings": map[string]any{
+				"clients": []map[string]any{{
+					"id":    uuid,
+					"email": email,
+					"flow":  "xtls-rprx-vision",
+					"level": 0,
+				}},
+				"decryption": "none",
 			},
 		}},
 	}
@@ -132,29 +155,6 @@ func (c *CLIClient) buildAddVLESSArgs(uuid, email string) []string {
 // account identified by email. xray 26+ uses flag syntax: -tag=TAG email.
 func (c *CLIClient) buildRemoveVLESSArgs(email string) []string {
 	return []string{"api", "rmu", "-s", c.APIAddr, "-tag=" + c.vlessTag(), email}
-}
-
-// buildAddSOCKSArgs returns the argv for `xray api adu` adding a SOCKS5
-// account.
-func (c *CLIClient) buildAddSOCKSArgs(user, pass, email string) []string {
-	payload := map[string]any{
-		"tag": c.socksTag(),
-		"users": []map[string]any{{
-			"email": email,
-			"account": map[string]any{
-				"type":     "xray.proxy.socks.Account",
-				"username": user,
-				"password": pass,
-			},
-		}},
-	}
-	return []string{"api", "adu", "-s", c.APIAddr, mustJSON(payload)}
-}
-
-// buildRemoveSOCKSArgs returns the argv for removing a SOCKS5 account.
-// xray 26+ uses flag syntax: -tag=TAG email.
-func (c *CLIClient) buildRemoveSOCKSArgs(email string) []string {
-	return []string{"api", "rmu", "-s", c.APIAddr, "-tag=" + c.socksTag(), email}
 }
 
 // buildStatsCmd returns the argv for `xray api statsquery` scoped to a single
@@ -211,24 +211,49 @@ func (c *CLIClient) RemoveVLESSUser(ctx context.Context, email string) error {
 	return nil
 }
 
-// AddSOCKSUser implements Client.
+// AddSOCKSUser implements Client. SOCKS in xray-core does not expose a
+// runtime UserManager, so we patch config.json and restart xray.
 func (c *CLIClient) AddSOCKSUser(ctx context.Context, user, pass, email string) error {
 	if user == "" || pass == "" || email == "" {
 		return fmt.Errorf("xray: AddSOCKSUser: user, pass and email are required")
 	}
-	if _, err := c.run(ctx, c.buildAddSOCKSArgs(user, pass, email)); err != nil {
+	if err := c.patchSOCKSAccounts(ctx, func(accs []map[string]string) []map[string]string {
+		for _, a := range accs {
+			if a["user"] == user {
+				a["pass"] = pass
+				return accs
+			}
+		}
+		return append(accs, map[string]string{"user": user, "pass": pass})
+	}); err != nil {
 		return fmt.Errorf("xray add socks %q: %w", email, err)
 	}
 	return nil
 }
 
-// RemoveSOCKSUser implements Client.
+// RemoveSOCKSUser implements Client. Removes the account whose `user` field
+// equals email and restarts xray. Returns ErrUserNotFound if no such account
+// exists in config.json.
 func (c *CLIClient) RemoveSOCKSUser(ctx context.Context, email string) error {
 	if email == "" {
 		return fmt.Errorf("xray: RemoveSOCKSUser: email is required")
 	}
-	if _, err := c.run(ctx, c.buildRemoveSOCKSArgs(email)); err != nil {
+	found := false
+	if err := c.patchSOCKSAccounts(ctx, func(accs []map[string]string) []map[string]string {
+		out := accs[:0]
+		for _, a := range accs {
+			if a["user"] == email {
+				found = true
+				continue
+			}
+			out = append(out, a)
+		}
+		return out
+	}); err != nil {
 		return fmt.Errorf("xray remove socks %q: %w", email, err)
+	}
+	if !found {
+		return ErrUserNotFound
 	}
 	return nil
 }
@@ -309,7 +334,100 @@ func (c *CLIClient) run(ctx context.Context, argv []string) ([]byte, error) {
 		return nil, fmt.Errorf("exec %s %s: %w (stderr: %s)",
 			c.XrayBin, strings.Join(argv, " "), err, strings.TrimSpace(stderr.String()))
 	}
+	// xray exits 0 even when adu/rmu changed nothing (e.g. wrong tag, schema
+	// mismatch, unsupported inbound type). Treat "Added/Removed 0 user(s)" as
+	// a real error so callers don't silently succeed.
+	if argv[0] == "api" && (argv[1] == "adu" || argv[1] == "rmu") && hasZeroAffected(stdout.Bytes()) {
+		return nil, fmt.Errorf("exec %s %s: 0 users affected (stdout: %s, stderr: %s)",
+			c.XrayBin, strings.Join(argv, " "),
+			strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()))
+	}
 	return stdout.Bytes(), nil
+}
+
+// hasZeroAffected detects xray's "Added 0 user(s) in total." or
+// "Removed 0 user(s) in total." trailer printed when the gRPC handler
+// rejected every entry but the CLI still exited 0.
+func hasZeroAffected(stdout []byte) bool {
+	s := string(stdout)
+	return strings.Contains(s, "Added 0 user(s)") || strings.Contains(s, "Removed 0 user(s)")
+}
+
+// patchSOCKSAccounts atomically rewrites config.json with a modified accounts
+// list for the SOCKS inbound, then restarts xray so the change takes effect.
+//
+// SOCKS user management cannot use the runtime gRPC API: xray-core's SOCKS
+// proxy does not implement the UserManager interface, so `xray api adu/rmu`
+// silently no-op (returning "Added 0 user(s)" with exit 0). The only way to
+// add/remove SOCKS accounts on a live server is to edit config.json and
+// restart xray — that's what this method does.
+func (c *CLIClient) patchSOCKSAccounts(ctx context.Context, modify func([]map[string]string) []map[string]string) error {
+	if c.ConfigPath == "" || c.RestartXray == nil {
+		return fmt.Errorf("xray: SOCKS user management requires ConfigPath and RestartXray")
+	}
+	data, err := os.ReadFile(c.ConfigPath)
+	if err != nil {
+		return fmt.Errorf("read xray config: %w", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return fmt.Errorf("decode xray config: %w", err)
+	}
+	inbounds, _ := raw["inbounds"].([]any)
+	tag := c.socksTag()
+	patched := false
+	for _, ib := range inbounds {
+		m, ok := ib.(map[string]any)
+		if !ok {
+			continue
+		}
+		if t, _ := m["tag"].(string); t != tag {
+			continue
+		}
+		settings, _ := m["settings"].(map[string]any)
+		if settings == nil {
+			settings = map[string]any{}
+			m["settings"] = settings
+		}
+		rawAccounts, _ := settings["accounts"].([]any)
+		current := make([]map[string]string, 0, len(rawAccounts))
+		for _, a := range rawAccounts {
+			am, ok := a.(map[string]any)
+			if !ok {
+				continue
+			}
+			user, _ := am["user"].(string)
+			pass, _ := am["pass"].(string)
+			current = append(current, map[string]string{"user": user, "pass": pass})
+		}
+		updated := modify(current)
+		next := make([]any, len(updated))
+		for i, u := range updated {
+			next[i] = map[string]any{"user": u["user"], "pass": u["pass"]}
+		}
+		settings["accounts"] = next
+		patched = true
+		break
+	}
+	if !patched {
+		return fmt.Errorf("xray: no inbound with tag %q in %s", tag, c.ConfigPath)
+	}
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode xray config: %w", err)
+	}
+	tmp := c.ConfigPath + ".tmp"
+	if err := os.WriteFile(tmp, out, 0o644); err != nil {
+		return fmt.Errorf("write xray config: %w", err)
+	}
+	if err := os.Rename(tmp, c.ConfigPath); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("install xray config: %w", err)
+	}
+	if err := c.RestartXray(ctx); err != nil {
+		return fmt.Errorf("restart xray: %w", err)
+	}
+	return nil
 }
 
 // classifyNotFound returns true when stderr from `xray api` matches one of

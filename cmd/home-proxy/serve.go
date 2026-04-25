@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -70,6 +73,18 @@ func runServe(ctx context.Context, configPath string) error {
 	xc := xray.NewCLIClient("xray", cfg.XrayAPI)
 	xc.VLESSTag = cfg.XrayVLESSTag
 	xc.SOCKSTag = cfg.XraySocksTag
+	xc.ConfigPath = cfg.XrayConfig
+	xc.RestartXray = func(ctx context.Context) error {
+		// Detached from caller's deadline so a slow restart can't strand
+		// xray with a half-applied config.
+		restartCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(restartCtx, "systemctl", "restart", "xray").CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("systemctl restart xray: %w (output: %s)", err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	}
 
 	b, err := bot.New(ctx, cfg.BotToken, bot.Deps{
 		Store:       st,
