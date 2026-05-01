@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,7 +9,6 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/uuigww/home-proxy/internal/store"
-	"github.com/uuigww/home-proxy/internal/xray"
 )
 
 // protoKind identifies which protocol an action targets.
@@ -146,8 +144,9 @@ func renderUserCardKeyboard(b *Bot, lang string, u store.User) *models.InlineKey
 
 // toggleUserProto flips VLESS or SOCKS on the given user atomically.
 //
-// DB is updated first, then Xray is told; on Xray failure the DB change is
-// rolled back. An info notification is fired on success for other admins.
+// DB is updated first, then xray's config.json is rebuilt and xray restarted;
+// on xray failure the DB change is rolled back. An info notification is fired
+// on success for other admins.
 func (b *Bot) toggleUserProto(ctx context.Context, update *models.Update, payload string, kind protoKind) error {
 	tgID := updateTGID(update)
 	id, err := parseUserID(payload)
@@ -161,21 +160,13 @@ func (b *Bot) toggleUserProto(ctx context.Context, update *models.Update, payloa
 	oldProtos := protoList(u)
 
 	newUser := u
-	var xrayApply func(context.Context) error
-	var xrayRollback func(context.Context) error
-
 	switch kind {
 	case protoVLESS:
 		if u.VLESSUUID == nil {
 			uuid := newUUID()
 			newUser.VLESSUUID = &uuid
-			xrayApply = func(ctx context.Context) error { return b.deps.Xray.AddVLESSUser(ctx, uuid, u.Name) }
-			xrayRollback = func(ctx context.Context) error { return b.deps.Xray.RemoveVLESSUser(ctx, u.Name) }
 		} else {
-			prevUUID := *u.VLESSUUID
 			newUser.VLESSUUID = nil
-			xrayApply = func(ctx context.Context) error { return b.deps.Xray.RemoveVLESSUser(ctx, u.Name) }
-			xrayRollback = func(ctx context.Context) error { return b.deps.Xray.AddVLESSUser(ctx, prevUUID, u.Name) }
 		}
 	case protoSOCKS:
 		if u.SOCKSUser == nil {
@@ -183,19 +174,13 @@ func (b *Bot) toggleUserProto(ctx context.Context, update *models.Update, payloa
 			pass := newSOCKSPass()
 			newUser.SOCKSUser = &user
 			newUser.SOCKSPass = &pass
-			xrayApply = func(ctx context.Context) error { return b.deps.Xray.AddSOCKSUser(ctx, user, pass, u.Name) }
-			xrayRollback = func(ctx context.Context) error { return b.deps.Xray.RemoveSOCKSUser(ctx, u.Name) }
 		} else {
-			prevUser := *u.SOCKSUser
-			prevPass := *u.SOCKSPass
 			newUser.SOCKSUser = nil
 			newUser.SOCKSPass = nil
-			xrayApply = func(ctx context.Context) error { return b.deps.Xray.RemoveSOCKSUser(ctx, u.Name) }
-			xrayRollback = func(ctx context.Context) error { return b.deps.Xray.AddSOCKSUser(ctx, prevUser, prevPass, u.Name) }
 		}
 	}
 
-	if err := b.applyUserChange(ctx, &u, &newUser, xrayApply, xrayRollback); err != nil {
+	if err := b.applyUserChange(ctx, &u, &newUser, b.reapplyXrayConfig, b.reapplyXrayConfig); err != nil {
 		b.deps.Log.Error("bot: toggle proto", "err", err, "user", u.Name)
 		return err
 	}
@@ -204,8 +189,9 @@ func (b *Bot) toggleUserProto(ctx context.Context, update *models.Update, payloa
 	return b.showUserCard(ctx, update, payload)
 }
 
-// setUserEnabled toggles the enabled flag atomically. When disabling a user
-// we proactively remove them from Xray; when enabling we (re-)add.
+// setUserEnabled toggles the enabled flag atomically. The xray config is
+// rebuilt from DB state and xray restarted so disabled users are dropped from
+// the live config and re-enabled users are reinstated.
 func (b *Bot) setUserEnabled(ctx context.Context, update *models.Update, payload string, enabled bool) error {
 	tgID := updateTGID(update)
 	id, err := parseUserID(payload)
@@ -222,51 +208,7 @@ func (b *Bot) setUserEnabled(ctx context.Context, update *models.Update, payload
 	newUser := u
 	newUser.Enabled = enabled
 
-	apply := func(ctx context.Context) error {
-		if enabled {
-			if u.VLESSUUID != nil {
-				if err := b.deps.Xray.AddVLESSUser(ctx, *u.VLESSUUID, u.Name); err != nil {
-					return err
-				}
-			}
-			if u.SOCKSUser != nil {
-				if err := b.deps.Xray.AddSOCKSUser(ctx, *u.SOCKSUser, *u.SOCKSPass, u.Name); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-		if u.VLESSUUID != nil {
-			if err := b.deps.Xray.RemoveVLESSUser(ctx, u.Name); err != nil && !errors.Is(err, xray.ErrUserNotFound) {
-				return err
-			}
-		}
-		if u.SOCKSUser != nil {
-			if err := b.deps.Xray.RemoveSOCKSUser(ctx, u.Name); err != nil && !errors.Is(err, xray.ErrUserNotFound) {
-				return err
-			}
-		}
-		return nil
-	}
-	rollback := func(ctx context.Context) error {
-		if enabled {
-			if u.VLESSUUID != nil {
-				_ = b.deps.Xray.RemoveVLESSUser(ctx, u.Name)
-			}
-			if u.SOCKSUser != nil {
-				_ = b.deps.Xray.RemoveSOCKSUser(ctx, u.Name)
-			}
-			return nil
-		}
-		if u.VLESSUUID != nil {
-			_ = b.deps.Xray.AddVLESSUser(ctx, *u.VLESSUUID, u.Name)
-		}
-		if u.SOCKSUser != nil {
-			_ = b.deps.Xray.AddSOCKSUser(ctx, *u.SOCKSUser, *u.SOCKSPass, u.Name)
-		}
-		return nil
-	}
-	if err := b.applyUserChange(ctx, &u, &newUser, apply, rollback); err != nil {
+	if err := b.applyUserChange(ctx, &u, &newUser, b.reapplyXrayConfig, b.reapplyXrayConfig); err != nil {
 		b.deps.Log.Error("bot: set enabled", "err", err)
 		return err
 	}
@@ -339,8 +281,9 @@ func (b *Bot) confirmDeleteUser(ctx context.Context, update *models.Update, payl
 	return b.sessions.Edit(ctx, b.tg, &sess, text, kb)
 }
 
-// deleteUser removes the user from Xray then the store. On Xray failure we
-// abort and keep the row.
+// deleteUser removes the user from the store then rebuilds xray's config so
+// the dropped user is no longer authenticated. On xray-rebuild failure the
+// user is restored to keep the two stores in sync.
 func (b *Bot) deleteUser(ctx context.Context, update *models.Update, payload string) error {
 	tgID := updateTGID(update)
 	id, err := parseUserID(payload)
@@ -351,19 +294,17 @@ func (b *Bot) deleteUser(ctx context.Context, update *models.Update, payload str
 	if err != nil {
 		return err
 	}
-	if u.VLESSUUID != nil {
-		if err := b.deps.Xray.RemoveVLESSUser(ctx, u.Name); err != nil && !errors.Is(err, xray.ErrUserNotFound) {
-			b.deps.Log.Error("bot: xray remove vless on delete", "err", err)
-			return err
-		}
-	}
-	if u.SOCKSUser != nil {
-		if err := b.deps.Xray.RemoveSOCKSUser(ctx, u.Name); err != nil && !errors.Is(err, xray.ErrUserNotFound) {
-			b.deps.Log.Error("bot: xray remove socks on delete", "err", err)
-			return err
-		}
-	}
 	if err := b.deps.Store.DeleteUser(ctx, id); err != nil {
+		return err
+	}
+	if err := b.reapplyXrayConfig(ctx); err != nil {
+		// Best-effort restore: re-create with a fresh row id.
+		restored := u
+		restored.ID = 0
+		if rbErr := b.deps.Store.CreateUser(ctx, &restored); rbErr != nil {
+			b.deps.Log.Error("bot: rollback delete failed", "err", rbErr, "user", u.Name)
+		}
+		b.deps.Log.Error("bot: xray apply on delete", "err", err, "user", u.Name)
 		return err
 	}
 	b.notifyInfo(ctx, update, "user.deleted", tgID, u.Name)

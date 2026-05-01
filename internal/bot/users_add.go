@@ -304,21 +304,11 @@ func (b *Bot) finishAddWizard(ctx context.Context, update *models.Update, sess *
 		return fmt.Errorf("create user: %w", err)
 	}
 
-	// Apply to Xray; on failure, remove DB row and report.
-	if u.VLESSUUID != nil {
-		if err := b.deps.Xray.AddVLESSUser(ctx, *u.VLESSUUID, u.Name); err != nil {
-			_ = b.deps.Store.DeleteUser(ctx, u.ID)
-			return fmt.Errorf("xray vless: %w", err)
-		}
-	}
-	if u.SOCKSUser != nil {
-		if err := b.deps.Xray.AddSOCKSUser(ctx, *u.SOCKSUser, *u.SOCKSPass, u.Name); err != nil {
-			if u.VLESSUUID != nil {
-				_ = b.deps.Xray.RemoveVLESSUser(ctx, u.Name)
-			}
-			_ = b.deps.Store.DeleteUser(ctx, u.ID)
-			return fmt.Errorf("xray socks: %w", err)
-		}
+	// Single rebuild + restart picks up both VLESS and SOCKS at once.
+	// On failure, drop the DB row so the two stores stay in sync.
+	if err := b.reapplyXrayConfig(ctx); err != nil {
+		_ = b.deps.Store.DeleteUser(ctx, u.ID)
+		return fmt.Errorf("apply xray config: %w", err)
 	}
 
 	ClearWizard(sess)

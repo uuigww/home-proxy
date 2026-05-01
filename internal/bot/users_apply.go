@@ -2,13 +2,40 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/go-telegram/bot/models"
 
 	"github.com/uuigww/home-proxy/internal/store"
+	"github.com/uuigww/home-proxy/internal/xray"
 )
+
+// reapplyXrayConfig rebuilds xray's config.json from current DB state and
+// restarts the xray systemd unit so the change takes effect.
+//
+// All user mutations (add/toggle/enable/delete) funnel through here instead of
+// the per-user runtime API. The runtime adu API and the SOCKS-via-restart path
+// are mutually incompatible: the SOCKS restart wipes any users added through
+// adu, so the only consistent strategy is a single full rebuild after every
+// DB write.
+func (b *Bot) reapplyXrayConfig(ctx context.Context) error {
+	rk, err := b.deps.Store.GetRealityKeys(ctx)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return fmt.Errorf("reality keys not initialised: %w", err)
+		}
+		return fmt.Errorf("get reality keys: %w", err)
+	}
+	return b.applyXrayConfig(ctx, xray.Reality{
+		PrivateKey: rk.PrivateKey,
+		PublicKey:  rk.PublicKey,
+		ShortID:    rk.ShortID,
+		Dest:       rk.Dest,
+		ServerName: rk.ServerName,
+	})
+}
 
 // applyUserChange atomically updates the DB then Xray; on Xray failure the
 // DB change is reverted so the two stores never diverge.
