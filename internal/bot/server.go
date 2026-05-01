@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -335,8 +336,13 @@ func (b *Bot) selfUpdate(ctx context.Context, update *models.Update) error {
 	}
 	tarTmp.Close()
 
-	// Extract binary from the archive.
-	binTmp, err := os.CreateTemp("", "home-proxy-update-bin-*")
+	// Extract binary directly into the target directory so the final rename
+	// is intra-filesystem (rename across devices fails with EXDEV; under
+	// PrivateTmp=true, /tmp is a tmpfs, so a temp file there cannot be
+	// renamed onto /usr/local/bin).
+	binPath := "/usr/local/bin/home-proxy"
+	binDir := filepath.Dir(binPath)
+	binTmp, err := os.CreateTemp(binDir, "home-proxy-update-bin-*")
 	if err != nil {
 		return fmt.Errorf("create bin temp: %w", err)
 	}
@@ -352,13 +358,8 @@ func (b *Bot) selfUpdate(ctx context.Context, update *models.Update) error {
 		return fmt.Errorf("chmod: %w", err)
 	}
 
-	// Atomic replace: copy to .new then rename over the live binary.
-	binPath := "/usr/local/bin/home-proxy"
-	newPath := binPath + ".new"
-	if err := os.Rename(binTmpPath, newPath); err != nil {
-		return fmt.Errorf("stage: %w", err)
-	}
-	if err := os.Rename(newPath, binPath); err != nil {
+	// Atomic replace within /usr/local/bin.
+	if err := os.Rename(binTmpPath, binPath); err != nil {
 		return fmt.Errorf("install: %w", err)
 	}
 
